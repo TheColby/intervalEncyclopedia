@@ -199,6 +199,7 @@ Main options:
 Output columns:
 
 - `ratio`
+- `ratio_decimal`
 - `prime_factorization`
 - `cents`
 - `largest_prime`
@@ -229,6 +230,7 @@ Main options:
 - `--exclude-unison`
 - `--exclude-octave`
 - `--precision N`
+- `--sort-by ratio|edo-step` (default: `ratio`)
 - `--output path`
 - `--output-format auto|txt|csv|json`
 
@@ -266,9 +268,13 @@ Main options:
 - `--scribd-source path.{tsv,csv,json}`, `--exclude-scribd`
 - `--miraheze-source path.{tsv,csv,json}`, `--exclude-miraheze`
 - `--huygens-fokker-source path.{tsv,csv,json}`, `--exclude-huygens-fokker`
+- `--xen-wiki-source path.{tsv,csv,json}`, `--exclude-xen-wiki`
 - `--min-octave-edo N`, `--max-octave-edo N`
 - `--min-tritave-edt N`, `--max-tritave-edt N`
 - `--min-consonance-divisions N`, `--max-consonance-divisions N`
+
+`--extra-source` rows support:
+`slug,name,expression,value[,tradition,note,subgroup_monzo,fjs_name,comma_size,xen_url]`.
 
 Default generated-family maxima are `64` (octave EDO), `32` (tritave EDT), and `32` (consonance families).
 
@@ -277,6 +283,7 @@ Default source imports:
 - `/Users/cleider/dev/intervalEncoclopedia/sources/scribd-list-of-intervals.tsv`
 - `/Users/cleider/dev/intervalEncoclopedia/sources/microtonal-miraheze-missing-intervals.tsv`
 - `/Users/cleider/dev/intervalEncoclopedia/sources/huygens-fokker-bpsite-intervals.tsv`
+- `/Users/cleider/dev/intervalEncoclopedia/sources/xenharmonic-wiki-missing-intervals.tsv`
 
 Output columns:
 
@@ -286,8 +293,16 @@ Output columns:
 - `prime_factorization`
 - `cents`
 - `expression`
+- `subgroup_monzo`
+- `fjs_name`
+- `comma_size`
+- `xen_url`
 - `tradition`
 - `note`
+
+Reference note:
+
+- Xen-derived entries include source URLs from [Xenharmonic Wiki](https://en.xen.wiki/), and the historical generator now imports Xen rows by default unless `--exclude-xen-wiki` is set.
 
 ## Master Assembly
 
@@ -296,7 +311,7 @@ Run:
 ```bash
 python3 /Users/cleider/dev/intervalEncoclopedia/generate-master-encyclopedia.py \
   --regenerate-all \
-  --output /Users/cleider/dev/intervalEncoclopedia/the-tuning-encyclopedia.txt
+  --output /Users/cleider/dev/intervalEncoclopedia/the-interval-encoclpaedia.txt
 ```
 
 Behavior:
@@ -312,7 +327,8 @@ Behavior:
 - supports standard presets including `us-letter`, `us-legal`, `a4`, and `11x17` (plus `a3`, `a5`, `b5`, `executive`),
 - allows arbitrary page sizes with `--page-width` and `--page-height` (unit required, e.g. `11in`, `279mm`),
 - renders interval expressions mathematically in LaTeX/PDF output (for example prime factorizations and symbolic expressions are typeset as equations),
-- uses aligned fixed-width LaTeX table columns for all volume/index tables in LaTeX/PDF output,
+- uses aligned longtable columns with configurable width weights and spacing for all volume/index tables in LaTeX/PDF output,
+- supports advanced LaTeX/PDF table rendering controls (row spacing, minimum row struts, long-token soft breaks, optional zebra striping, optional header shading, decimal trimming, and width-weight tuning),
 - writes volume markers only for text master output:
   `%%<VOLUME:JUST:BEGIN>` ... `%%<VOLUME:JUST:END>`,
   `%%<VOLUME:TEMPERED:BEGIN>` ... `%%<VOLUME:TEMPERED:END>`,
@@ -323,7 +339,7 @@ Generate a page-numbered LaTeX book:
 ```bash
 python3 /Users/cleider/dev/intervalEncoclopedia/generate-master-encyclopedia.py \
   --skip-generation \
-  --output /Users/cleider/dev/intervalEncoclopedia/the-tuning-encyclopedia.tex \
+  --output /Users/cleider/dev/intervalEncoclopedia/the-interval-encoclpaedia.tex \
   --output-format latex
 ```
 
@@ -332,7 +348,7 @@ Generate a page-numbered PDF book:
 ```bash
 python3 /Users/cleider/dev/intervalEncoclopedia/generate-master-encyclopedia.py \
   --skip-generation \
-  --output /Users/cleider/dev/intervalEncoclopedia/the-tuning-encyclopedia.pdf \
+  --output /Users/cleider/dev/intervalEncoclopedia/the-interval-encoclpaedia.pdf \
   --output-format pdf \
   --latex-engine auto \
   --latex-runs 2 \
@@ -344,7 +360,7 @@ Generate a landscape 11x17 PDF:
 ```bash
 python3 /Users/cleider/dev/intervalEncoclopedia/generate-master-encyclopedia.py \
   --skip-generation \
-  --output /Users/cleider/dev/intervalEncoclopedia/the-tuning-encyclopedia-11x17-landscape.pdf \
+  --output /Users/cleider/dev/intervalEncoclopedia/the-interval-encoclpaedia-11x17-landscape.pdf \
   --output-format pdf \
   --paper-size 11x17 \
   --orientation landscape
@@ -355,12 +371,44 @@ Generate a custom-size PDF (arbitrary page dimensions):
 ```bash
 python3 /Users/cleider/dev/intervalEncoclopedia/generate-master-encyclopedia.py \
   --skip-generation \
-  --output /Users/cleider/dev/intervalEncoclopedia/the-tuning-encyclopedia-custom.pdf \
+  --output /Users/cleider/dev/intervalEncoclopedia/the-interval-encoclpaedia-custom.pdf \
   --output-format pdf \
   --page-width 14in \
   --page-height 8.5in \
   --orientation landscape \
   --page-margin 0.75in
+```
+
+LaTeX/PDF table rendering options (selected):
+
+- `--table-font-size`, `--table-fit-font-size`
+- `--table-tabcolsep-pt`, `--table-fit-tabcolsep-pt`
+- `--table-arraystretch`, `--table-extra-row-height-pt`, `--table-row-strut-ex`
+- `--table-usable-width`, `--table-fit-usable-width`, `--table-min-column-width`
+- `--table-emergency-stretch-em`
+- `--table-break-long-tokens`, `--no-table-break-long-tokens`, `--table-break-chunk`
+- `--table-max-decimals`, `--table-trim-trailing-zeros`, `--no-table-trim-trailing-zeros`
+- `--table-zebra`, `--table-zebra-black-pct`
+- `--table-header-shade`, `--table-header-black-pct`
+- `--table-weight-text`, `--table-weight-math`, `--table-weight-numeric`, `--table-weight-other`
+
+Example: subtle zebra shading with wider rows and denser fitting controls.
+
+```bash
+python3 /Users/cleider/dev/intervalEncoclopedia/generate-master-encyclopedia.py \
+  --skip-generation \
+  --output /Users/cleider/dev/intervalEncoclopedia/the-interval-encoclpaedia-styled.pdf \
+  --output-format pdf \
+  --paper-size 11x17 \
+  --orientation landscape \
+  --table-zebra \
+  --table-zebra-black-pct 2.0 \
+  --table-header-shade \
+  --table-header-black-pct 6.0 \
+  --table-arraystretch 1.2 \
+  --table-extra-row-height-pt 0.8 \
+  --table-row-strut-ex 2.9 \
+  --table-max-decimals 8
 ```
 
 ## Musical Table Export
@@ -388,13 +436,13 @@ For current defaults:
 
 - just rows: $15{,}616$
 - tempered rows: $4{,}752$
-- historical rows: $4{,}516$
-- combined rows: $24{,}884$
+- historical rows: $4{,}536$
+- combined rows: $24{,}904$
 
 At approximately $50$ rows per printed page, the default profile is about:
 
 $$
-\frac{24{,}884}{50} \approx 498\ \text{pages}.
+\frac{24{,}904}{50} \approx 498\ \text{pages}.
 $$
 
 Empirical growth intuition:

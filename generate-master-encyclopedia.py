@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Generate the master "The Tuning Encyclopedia" file by stitching all source volumes.
+Generate the master "The Interval Encoclpaedia" file by stitching all source volumes.
 
 This script can optionally regenerate missing source files (or all source
 files) by calling the three generator scripts in this workspace.
@@ -30,10 +30,12 @@ from cli_output import (
 )
 
 
-MASTER_TITLE = "The Tuning Encyclopedia"
+MASTER_TITLE = "The Interval Encoclpaedia"
 LATEX_ENGINE_CHOICES = ("auto", "lualatex", "xelatex", "pdflatex")
 ORIENTATION_CHOICES = ("portrait", "landscape")
+OVERFLOW_POLICY_CHOICES = ("ask", "keep", "abort", "fit", "larger-page")
 OUTPUT_FORMAT_CHOICES = ("auto", "txt", "csv", "json", "latex", "pdf")
+TABLE_FONT_SIZE_CHOICES = ("tiny", "scriptsize", "footnotesize", "small", "normalsize")
 LATEX_MATH_COLUMNS = {"ratio", "prime_factorization", "expression"}
 LATEX_WIDE_TEXT_COLUMNS = {
     "title",
@@ -46,6 +48,7 @@ LATEX_WIDE_TEXT_COLUMNS = {
     "content",
 }
 LATEX_NUMERIC_COLUMNS = {
+    "ratio_decimal",
     "edo",
     "step",
     "cents",
@@ -54,7 +57,9 @@ LATEX_NUMERIC_COLUMNS = {
     "odd_limit",
     "total_rows",
 }
+SOFT_BREAK_PUNCTUATION = set("/-_:;=+|")
 LATEX_DIMENSION_PATTERN = re.compile(r"^\d+(?:\.\d+)?(?:in|mm|cm|pt)$", re.IGNORECASE)
+ENCYCLOPEDIA_PATTERN = re.compile(r"encyclopedia", re.IGNORECASE)
 PAPER_SIZE_CANONICAL_TO_GEOMETRY = {
     "us-letter": ("letterpaper",),
     "us-legal": ("legalpaper",),
@@ -148,6 +153,7 @@ def resolve_page_layout(
             geometry_options=",".join(options),
             paper_label=f"{width} x {height}",
             orientation=orientation,
+            margin=margin,
         )
 
     canonical_paper = normalize_paper_size(paper_size)
@@ -157,6 +163,7 @@ def resolve_page_layout(
         geometry_options=",".join(options),
         paper_label=canonical_paper,
         orientation=orientation,
+        margin=margin,
     )
 
 
@@ -175,6 +182,40 @@ class PageLayout:
     geometry_options: str
     paper_label: str
     orientation: str
+    margin: str
+
+
+@dataclass(frozen=True)
+class LatexTableStyle:
+    font_size: str
+    fit_font_size: str
+    tabcolsep_pt: float
+    fit_tabcolsep_pt: float
+    arraystretch: float
+    extra_row_height_pt: float
+    row_strut_ex: float
+    usable_width: float
+    fit_usable_width: float
+    min_column_width: float
+    emergency_stretch_em: float
+    break_long_tokens: bool
+    break_chunk: int
+    max_decimals: int | None
+    trim_trailing_zeros: bool
+    zebra: bool
+    zebra_black_pct: float
+    header_shade: bool
+    header_black_pct: float
+    weight_text: float
+    weight_math: float
+    weight_numeric: float
+    weight_other: float
+
+
+@dataclass(frozen=True)
+class PdfCompileResult:
+    engine: str
+    overflow_warnings: List[str]
 
 
 def parse_total_rows_text(content: str) -> str:
@@ -370,7 +411,7 @@ def write_master_json(output_path: Path, volumes: List[Volume], reporter: Report
         handle.write("\n")
 
 
-def latex_escape(text: str) -> str:
+def latex_escape_char(char: str) -> str:
     replacements = {
         "\\": r"\textbackslash{}",
         "&": r"\&",
@@ -383,7 +424,49 @@ def latex_escape(text: str) -> str:
         "~": r"\textasciitilde{}",
         "^": r"\textasciicircum{}",
     }
-    return "".join(replacements.get(char, char) for char in text)
+    return replacements.get(char, char)
+
+
+def latex_escape(text: str) -> str:
+    text = typeset_encyclopaedia_spelling(text)
+    return "".join(latex_escape_char(char) for char in text)
+
+
+def latex_escape_table_text(text: str, table_style: LatexTableStyle) -> str:
+    if not table_style.break_long_tokens:
+        return latex_escape(text)
+
+    chunk = max(2, table_style.break_chunk)
+    output: List[str] = []
+    run_length = 0
+    for char in typeset_encyclopaedia_spelling(text):
+        output.append(latex_escape_char(char))
+        if char.isalnum():
+            run_length += 1
+            if run_length >= chunk:
+                output.append(r"\allowbreak{}")
+                run_length = 0
+            continue
+        if char in SOFT_BREAK_PUNCTUATION:
+            output.append(r"\allowbreak{}")
+        run_length = 0
+    return "".join(output)
+
+
+def encyclopedia_replacement(match: re.Match[str]) -> str:
+    token = match.group(0)
+    replacement = "encyclopaedia"
+    if token.isupper():
+        return replacement.upper()
+    if token.islower():
+        return replacement
+    if token[0].isupper() and token[1:].islower():
+        return replacement.capitalize()
+    return replacement
+
+
+def typeset_encyclopaedia_spelling(text: str) -> str:
+    return ENCYCLOPEDIA_PATTERN.sub(encyclopedia_replacement, str(text))
 
 
 def sanitize_verbatim_text(text: str) -> str:
@@ -688,7 +771,7 @@ def parse_math_to_latex(text: str) -> str | None:
         return None
 
 
-def maybe_typeset_math(text: str) -> str:
+def maybe_typeset_math(text: str, table_style: LatexTableStyle | None = None) -> str:
     normalized = normalize_cell_text(text)
     if not normalized:
         return ""
@@ -704,7 +787,12 @@ def maybe_typeset_math(text: str) -> str:
 
     parsed = parse_math_to_latex(normalized)
     if parsed is None:
-        return rf"\texttt{{{latex_escape(normalized)}}}"
+        escaped = (
+            latex_escape_table_text(normalized, table_style)
+            if table_style is not None
+            else latex_escape(normalized)
+        )
+        return rf"\texttt{{{escaped}}}"
     return rf"\({parsed}\)"
 
 
@@ -712,47 +800,126 @@ def canonical_column_name(column: str) -> str:
     return normalize_cell_text(column).casefold().replace(" ", "_")
 
 
-def render_latex_cell(column: str, value: str) -> str:
+def format_numeric_cell_text(value: str, table_style: LatexTableStyle) -> str:
+    if table_style.max_decimals is None:
+        return value
+    match = re.fullmatch(r"(-?\d+)\.(\d+)", value)
+    if match is None:
+        return value
+    whole, fractional = match.groups()
+    if table_style.max_decimals >= 0:
+        fractional = fractional[: table_style.max_decimals]
+    if table_style.trim_trailing_zeros:
+        fractional = fractional.rstrip("0")
+    if not fractional:
+        return whole
+    return f"{whole}.{fractional}"
+
+
+def render_latex_cell(column: str, value: str, table_style: LatexTableStyle) -> str:
     normalized = normalize_cell_text(value)
+    if normalized == "-":
+        return "-"
     canonical = canonical_column_name(column)
+    if canonical in LATEX_NUMERIC_COLUMNS:
+        normalized = format_numeric_cell_text(normalized, table_style)
     if canonical in LATEX_MATH_COLUMNS:
-        return maybe_typeset_math(normalized)
-    return latex_escape(normalized)
+        return maybe_typeset_math(normalized, table_style=table_style)
+    return latex_escape_table_text(normalized, table_style)
 
 
-def latex_column_weight(canonical_column: str) -> float:
+def latex_column_weight(canonical_column: str, table_style: LatexTableStyle) -> float:
     if canonical_column in LATEX_WIDE_TEXT_COLUMNS:
-        return 2.6
+        return table_style.weight_text
     if canonical_column in LATEX_MATH_COLUMNS:
-        return 1.8
+        return table_style.weight_math
     if canonical_column in LATEX_NUMERIC_COLUMNS:
-        return 1.2
-    return 1.5
+        return table_style.weight_numeric
+    return table_style.weight_other
 
 
 def latex_column_alignment(canonical_column: str) -> str:
     if canonical_column in LATEX_NUMERIC_COLUMNS:
-        return r"\raggedleft\arraybackslash"
-    return r"\raggedright\arraybackslash"
+        return r"\RaggedLeft\arraybackslash\hspace{0pt}"
+    return r"\RaggedRight\arraybackslash\hspace{0pt}"
 
 
-def latex_column_spec_for_columns(columns: Sequence[str], usable_width: float = 0.98) -> str:
+def allocate_column_widths(
+    columns: Sequence[str],
+    *,
+    usable_width: float,
+    minimum_width: float,
+    table_style: LatexTableStyle,
+) -> List[float]:
+    if not columns:
+        return []
+
+    canonical_columns = [canonical_column_name(column) for column in columns]
+    weights = [latex_column_weight(canonical_column, table_style) for canonical_column in canonical_columns]
+    weight_total = sum(weights)
+    if weight_total <= 0:
+        return [usable_width / len(columns)] * len(columns)
+
+    raw_widths = [usable_width * (weight / weight_total) for weight in weights]
+    safe_minimum = max(0.0, minimum_width)
+    if safe_minimum * len(columns) >= usable_width:
+        safe_minimum = usable_width / (len(columns) * 1.2)
+
+    widths = [max(raw_width, safe_minimum) for raw_width in raw_widths]
+    total_width = sum(widths)
+    if total_width <= usable_width:
+        return widths
+
+    excess = total_width - usable_width
+    adjustable = [max(0.0, width - safe_minimum) for width in widths]
+    adjustable_total = sum(adjustable)
+    if adjustable_total <= 0:
+        return [usable_width / len(columns)] * len(columns)
+
+    normalized_widths: List[float] = []
+    for width, room in zip(widths, adjustable):
+        reduction = excess * (room / adjustable_total)
+        normalized_widths.append(max(safe_minimum, width - reduction))
+
+    correction = usable_width - sum(normalized_widths)
+    if normalized_widths:
+        normalized_widths[-1] = max(safe_minimum, normalized_widths[-1] + correction)
+    return normalized_widths
+
+
+def latex_column_spec_for_columns(
+    columns: Sequence[str],
+    *,
+    usable_width: float = 0.98,
+    minimum_width: float = 0.04,
+    tabcolsep_pt: float = 4.0,
+    table_style: LatexTableStyle,
+) -> str:
     if not columns:
         return "@{}l@{}"
 
     canonical_columns = [canonical_column_name(column) for column in columns]
-    weights = [latex_column_weight(canonical_column) for canonical_column in canonical_columns]
-    weight_total = sum(weights)
+    widths = allocate_column_widths(
+        columns,
+        usable_width=usable_width,
+        minimum_width=minimum_width,
+        table_style=table_style,
+    )
+    intercolumn_pt_total = max(0.0, 2.0 * max(0, len(columns) - 1) * tabcolsep_pt)
+    per_column_adjustment_pt = intercolumn_pt_total / len(columns)
     columns_spec: List[str] = []
-    for canonical_column, weight in zip(canonical_columns, weights):
-        width = usable_width * (weight / weight_total)
+    for canonical_column, width in zip(canonical_columns, widths):
         columns_spec.append(
-            rf">{{{latex_column_alignment(canonical_column)}}}p{{{width:.5f}\linewidth}}"
+            rf">{{{latex_column_alignment(canonical_column)}}}p{{\dimexpr{width:.5f}\linewidth-{per_column_adjustment_pt:.4f}pt\relax}}"
         )
     return "@{}" + "".join(columns_spec) + "@{}"
 
 
-def build_latex_table_for_volume(volume: Volume) -> List[str]:
+def build_latex_table_for_volume(
+    volume: Volume,
+    table_style: LatexTableStyle,
+    compact_tables: bool = False,
+) -> List[str]:
     columns, rows = parse_volume_rows(volume)
     if not columns:
         return [
@@ -762,26 +929,120 @@ def build_latex_table_for_volume(volume: Volume) -> List[str]:
             r"\end{Verbatim}",
         ]
 
+    usable_width = table_style.fit_usable_width if compact_tables else table_style.usable_width
+    table_font_size = table_style.fit_font_size if compact_tables else table_style.font_size
+    table_font_command = rf"\{table_font_size}"
+    tabcolsep_value = (
+        table_style.fit_tabcolsep_pt if compact_tables else table_style.tabcolsep_pt
+    )
+    tabcolsep = f"{tabcolsep_value:.2f}pt"
+    header_cells = " & ".join(latex_escape(column) for column in columns) + r" \\"
+    if table_style.header_shade:
+        header_cells = r"\rowcolor{tableheader}" + " " + header_cells
+
     lines: List[str] = [
         r"\section*{Tabular Content}",
         r"\begingroup",
-        r"\scriptsize",
-        rf"\begin{{longtable}}{{{latex_column_spec_for_columns(columns)}}}",
-        r"\toprule",
-        " & ".join(latex_escape(column) for column in columns) + r" \\",
-        r"\midrule",
-        r"\endhead",
+        table_font_command,
+        rf"\setlength{{\tabcolsep}}{{{tabcolsep}}}",
     ]
+    if table_style.zebra:
+        lines.append(r"\rowcolors{2}{tablezebra}{white}")
+    lines.extend(
+        [
+            rf"\begin{{longtable}}{{{latex_column_spec_for_columns(columns, usable_width=usable_width, minimum_width=table_style.min_column_width, tabcolsep_pt=tabcolsep_value, table_style=table_style)}}}",
+            r"\toprule",
+            header_cells,
+            r"\midrule",
+            r"\endfirsthead",
+            r"\toprule",
+            header_cells,
+            r"\midrule",
+            r"\endhead",
+            r"\midrule",
+            rf"\multicolumn{{{len(columns)}}}{{r}}{{\footnotesize\itshape Continued on next page}} \\",
+            r"\midrule",
+            r"\endfoot",
+            r"\bottomrule",
+            r"\endlastfoot",
+        ]
+    )
 
     for row in rows:
-        cells = [render_latex_cell(column, row.get(column, "")) for column in columns]
+        cells = [
+            rf"\TableRowStrut{{}} {render_latex_cell(column, row.get(column, ''), table_style)}"
+            for column in columns
+        ]
         lines.append(" & ".join(cells) + r" \\")
 
-    lines.extend([r"\bottomrule", r"\end{longtable}", r"\endgroup"])
+    lines.extend([r"\end{longtable}", r"\endgroup"])
     return lines
 
 
-def build_latex_document(volumes: List[Volume], generated_utc: str, page_layout: PageLayout) -> str:
+def build_latex_volume_index_table(
+    volumes: List[Volume],
+    table_style: LatexTableStyle,
+    compact_tables: bool,
+) -> List[str]:
+    columns = ["tag", "title", "source_file", "source_format", "total_rows"]
+    usable_width = table_style.fit_usable_width if compact_tables else table_style.usable_width
+    table_font_size = table_style.fit_font_size if compact_tables else table_style.font_size
+    table_font_command = rf"\{table_font_size}"
+    tabcolsep_value = (
+        table_style.fit_tabcolsep_pt if compact_tables else table_style.tabcolsep_pt
+    )
+    tabcolsep = f"{tabcolsep_value:.2f}pt"
+
+    header_cells = "Tag & Title & Source File & Source Format & Total Rows \\\\"
+    if table_style.header_shade:
+        header_cells = r"\rowcolor{tableheader}" + " " + header_cells
+
+    lines: List[str] = [r"\begingroup", table_font_command, rf"\setlength{{\tabcolsep}}{{{tabcolsep}}}"]
+    if table_style.zebra:
+        lines.append(r"\rowcolors{2}{tablezebra}{white}")
+    lines.extend(
+        [
+            rf"\begin{{longtable}}{{{latex_column_spec_for_columns(columns, usable_width=usable_width, minimum_width=table_style.min_column_width, tabcolsep_pt=tabcolsep_value, table_style=table_style)}}}",
+            r"\toprule",
+            header_cells,
+            r"\midrule",
+            r"\endfirsthead",
+            r"\toprule",
+            header_cells,
+            r"\midrule",
+            r"\endhead",
+            r"\midrule",
+            rf"\multicolumn{{{len(columns)}}}{{r}}{{\footnotesize\itshape Continued on next page}} \\",
+            r"\midrule",
+            r"\endfoot",
+            r"\bottomrule",
+            r"\endlastfoot",
+        ]
+    )
+
+    for volume in volumes:
+        row_cells = [
+            rf"\TableRowStrut{{}} {latex_escape(volume.tag)}",
+            rf"\TableRowStrut{{}} {latex_escape(volume.title)}",
+            rf"\TableRowStrut{{}} \texttt{{{latex_escape_table_text(str(volume.source_path), table_style)}}}",
+            rf"\TableRowStrut{{}} {latex_escape(volume.source_format)}",
+            rf"\TableRowStrut{{}} {latex_escape(volume.total_rows)}",
+        ]
+        lines.append(" & ".join(row_cells) + r" \\")
+
+    lines.extend([r"\end{longtable}", r"\endgroup"])
+    return lines
+
+
+def build_latex_document(
+    volumes: List[Volume],
+    generated_utc: str,
+    page_layout: PageLayout,
+    table_style: LatexTableStyle,
+    compact_tables: bool = False,
+) -> str:
+    zebra_pct = f"{table_style.zebra_black_pct:.3f}".rstrip("0").rstrip(".")
+    header_pct = f"{table_style.header_black_pct:.3f}".rstrip("0").rstrip(".")
     lines: List[str] = [
         r"\documentclass[11pt,oneside]{book}",
         rf"\usepackage[{page_layout.geometry_options}]{{geometry}}",
@@ -801,6 +1062,7 @@ def build_latex_document(volumes: List[Volume], generated_utc: str, page_layout:
         r"\usepackage{array}",
         r"\usepackage{booktabs}",
         r"\usepackage{longtable}",
+        r"\usepackage[table]{xcolor}",
         r"\usepackage{ragged2e}",
         r"\usepackage[hidelinks]{hyperref}",
         r"\usepackage{fancyhdr}",
@@ -809,6 +1071,14 @@ def build_latex_document(volumes: List[Volume], generated_utc: str, page_layout:
         r"\setlength{\parskip}{0.55em}",
         r"\setlength{\LTleft}{0pt}",
         r"\setlength{\LTright}{0pt}",
+        r"\setlength{\LTpre}{4pt}",
+        r"\setlength{\LTpost}{4pt}",
+        rf"\setlength{{\emergencystretch}}{{{table_style.emergency_stretch_em:.2f}em}}",
+        rf"\renewcommand{{\arraystretch}}{{{table_style.arraystretch:.3f}}}",
+        rf"\setlength{{\extrarowheight}}{{{table_style.extra_row_height_pt:.2f}pt}}",
+        rf"\newcommand{{\TableRowStrut}}{{\rule{{0pt}}{{{table_style.row_strut_ex:.3f}ex}}}}",
+        rf"\definecolor{{tablezebra}}{{gray}}{{{1.0 - (table_style.zebra_black_pct / 100.0):.6f}}}",
+        rf"\definecolor{{tableheader}}{{gray}}{{{1.0 - (table_style.header_black_pct / 100.0):.6f}}}",
         r"\pagestyle{fancy}",
         r"\fancyhf{}",
         r"\fancyhead[L]{\nouppercase{\leftmark}}",
@@ -821,7 +1091,7 @@ def build_latex_document(volumes: List[Volume], generated_utc: str, page_layout:
         r"  \renewcommand{\headrulewidth}{0pt}",
         r"}",
         rf"\title{{{latex_escape(MASTER_TITLE)}}}",
-        r"\author{intervalEncyclopedia generator}",
+        rf"\author{{{latex_escape('intervalEncyclopedia generator')}}}",
         rf"\date{{Generated {latex_escape(generated_utc)}}}",
         r"\begin{document}",
         r"\frontmatter",
@@ -832,31 +1102,29 @@ def build_latex_document(volumes: List[Volume], generated_utc: str, page_layout:
         r"\clearpage",
         r"\chapter*{Edition Notes}",
         r"\addcontentsline{toc}{chapter}{Edition Notes}",
-        r"This document is generated automatically from the three source volumes of intervalEncyclopedia.",
+        latex_escape(
+            "This document is generated automatically from the three source volumes of intervalEncyclopedia."
+        ),
         r"\begin{itemize}",
         rf"  \item Edition title: {latex_escape(MASTER_TITLE)}",
         rf"  \item Generation timestamp (UTC): {latex_escape(generated_utc)}",
         rf"  \item Paper layout: {latex_escape(page_layout.paper_label)} ({latex_escape(page_layout.orientation)})",
         rf"  \item Volume count: {len(volumes)}",
+        rf"  \item Table font size: \texttt{{{latex_escape(table_style.fit_font_size if compact_tables else table_style.font_size)}}}",
+        rf"  \item Table spacing: tabcolsep={table_style.fit_tabcolsep_pt if compact_tables else table_style.tabcolsep_pt:.2f}pt, arraystretch={table_style.arraystretch:.3f}, extrarowheight={table_style.extra_row_height_pt:.2f}pt",
+        rf"  \item Decimal render policy: max\_decimals={table_style.max_decimals}, trim\_trailing\_zeros={latex_escape(str(table_style.trim_trailing_zeros))}",
+        rf"  \item Optional row styling: zebra={latex_escape(str(table_style.zebra))} ({zebra_pct}\% black), header\_shade={latex_escape(str(table_style.header_shade))} ({header_pct}\% black)",
         r"\end{itemize}",
         r"\mainmatter",
         r"\chapter{Volume Index}",
-        rf"\begin{{longtable}}{{{latex_column_spec_for_columns(['tag', 'title', 'source_file', 'source_format', 'total_rows'])}}}",
-        r"\toprule",
-        r"Tag & Title & Source File & Source Format & Total Rows \\",
-        r"\midrule",
-        r"\endhead",
     ]
-
-    for volume in volumes:
-        lines.append(
-            rf"{latex_escape(volume.tag)} & {latex_escape(volume.title)} & "
-            rf"\texttt{{{latex_escape(str(volume.source_path))}}} & "
-            rf"{latex_escape(volume.source_format)} & "
-            rf"{latex_escape(volume.total_rows)} \\"
+    lines.extend(
+        build_latex_volume_index_table(
+            volumes=volumes,
+            table_style=table_style,
+            compact_tables=compact_tables,
         )
-
-    lines.extend([r"\bottomrule", r"\end{longtable}"])
+    )
 
     for volume in volumes:
         lines.extend(
@@ -870,7 +1138,13 @@ def build_latex_document(volumes: List[Volume], generated_utc: str, page_layout:
                 r"\end{itemize}",
             ]
         )
-        lines.extend(build_latex_table_for_volume(volume))
+        lines.extend(
+            build_latex_table_for_volume(
+                volume,
+                table_style=table_style,
+                compact_tables=compact_tables,
+            )
+        )
 
     lines.extend([r"\end{document}", ""])
     return "\n".join(lines)
@@ -880,6 +1154,7 @@ def write_master_latex(
     output_path: Path,
     volumes: List[Volume],
     page_layout: PageLayout,
+    table_style: LatexTableStyle,
     reporter: Reporter,
 ) -> None:
     reporter.info(f"Writing master document (latex) with {len(volumes)} volumes...")
@@ -888,6 +1163,7 @@ def write_master_latex(
         volumes=volumes,
         generated_utc=generated_utc,
         page_layout=page_layout,
+        table_style=table_style,
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", encoding="utf-8") as handle:
@@ -910,7 +1186,7 @@ def resolve_latex_engines(requested_engine: str) -> List[str]:
     return engines
 
 
-def run_latex_pass(engine: str, tex_path: Path, reporter: Reporter) -> None:
+def run_latex_pass(engine: str, tex_path: Path, reporter: Reporter) -> subprocess.CompletedProcess[str]:
     command = [
         engine,
         "-interaction=nonstopmode",
@@ -935,39 +1211,103 @@ def run_latex_pass(engine: str, tex_path: Path, reporter: Reporter) -> None:
             f"stdout (tail):\n{stdout_tail}\n"
             f"stderr (tail):\n{stderr_tail}"
         )
+    return completed
 
 
-def write_master_pdf(
+def extract_overflow_warnings(log_text: str) -> List[str]:
+    warnings: List[str] = []
+    seen: set[str] = set()
+    for line in log_text.splitlines():
+        if "Overfull \\hbox" not in line and "Overfull \\vbox" not in line:
+            continue
+        normalized = " ".join(line.strip().split())
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        warnings.append(normalized)
+    return warnings
+
+
+def report_overflow_warnings(
+    warnings: Sequence[str],
+    *,
     output_path: Path,
-    volumes: List[Volume],
     page_layout: PageLayout,
+    compact_tables: bool,
+) -> None:
+    mode_label = "compact fit mode" if compact_tables else "normal mode"
+    print(
+        "ERROR: PDF typesetting overflow detected. "
+        f"Text does not fully fit the page for '{output_path}'.",
+        file=sys.stderr,
+    )
+    print(
+        f"ERROR: Layout={page_layout.paper_label} ({page_layout.orientation}), "
+        f"margin={page_layout.margin}, table_mode={mode_label}. "
+        f"Overfull warnings={len(warnings)}.",
+        file=sys.stderr,
+    )
+    sample_count = min(5, len(warnings))
+    for warning_line in warnings[:sample_count]:
+        print(f"ERROR: {warning_line}", file=sys.stderr)
+    if len(warnings) > sample_count:
+        print(
+            f"ERROR: ... {len(warnings) - sample_count} additional overflow warning(s) omitted.",
+            file=sys.stderr,
+        )
+
+
+def choose_overflow_action(overflow_policy: str) -> str:
+    if overflow_policy != "ask":
+        return overflow_policy
+
+    print(
+        "PDF overflow detected. Do you want to make text fit, use a larger page, "
+        "keep the current PDF, or abort?",
+        file=sys.stderr,
+    )
+    if not sys.stdin.isatty():
+        print(
+            "ERROR: Non-interactive session; cannot ask for overflow resolution. "
+            "Re-run with --overflow-policy keep|fit|larger-page|abort.",
+            file=sys.stderr,
+        )
+        return "abort"
+
+    while True:
+        response = input("Choose [f]it / [l]arger-page / [k]eep / [a]bort: ").strip().casefold()
+        if response in {"f", "fit"}:
+            return "fit"
+        if response in {"l", "larger", "larger-page"}:
+            return "larger-page"
+        if response in {"k", "keep"}:
+            return "keep"
+        if response in {"a", "abort"}:
+            return "abort"
+        print("Please enter f, l, k, or a.", file=sys.stderr)
+
+
+def compile_pdf_document(
+    *,
+    document: str,
+    output_path: Path,
     latex_engine: str,
     latex_runs: int,
-    keep_pdf_tex: bool,
     reporter: Reporter,
-) -> None:
-    reporter.info(f"Writing master document (pdf) with {len(volumes)} volumes...")
-    generated_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    document = build_latex_document(
-        volumes=volumes,
-        generated_utc=generated_utc,
-        page_layout=page_layout,
-    )
+) -> PdfCompileResult:
     engines = resolve_latex_engines(latex_engine)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
     compile_errors: List[str] = []
-    compiled = False
     for engine in engines:
         try:
-            with tempfile.TemporaryDirectory(prefix="tuning-encyclopedia-") as temp_dir:
+            with tempfile.TemporaryDirectory(prefix="interval-encoclpaedia-") as temp_dir:
                 temp_dir_path = Path(temp_dir)
-                tex_path = temp_dir_path / "the-tuning-encyclopedia.tex"
+                tex_path = temp_dir_path / "the-interval-encoclpaedia.tex"
                 tex_path.write_text(document, encoding="utf-8")
 
+                final_completed: subprocess.CompletedProcess[str] | None = None
                 for pass_index in range(1, latex_runs + 1):
                     reporter.info(f"Compiling PDF ({engine}), pass {pass_index}/{latex_runs}...")
-                    run_latex_pass(engine=engine, tex_path=tex_path, reporter=reporter)
+                    final_completed = run_latex_pass(engine=engine, tex_path=tex_path, reporter=reporter)
 
                 compiled_pdf_path = tex_path.with_suffix(".pdf")
                 if not compiled_pdf_path.exists():
@@ -975,20 +1315,108 @@ def write_master_pdf(
                         f"LaTeX engine did not produce expected PDF: {compiled_pdf_path}"
                     )
 
+                log_path = tex_path.with_suffix(".log")
+                log_text = ""
+                if log_path.exists():
+                    log_text = log_path.read_text(encoding="utf-8", errors="replace")
+                if final_completed is not None:
+                    log_text = f"{log_text}\n{final_completed.stdout}\n{final_completed.stderr}"
+                overflow_warnings = extract_overflow_warnings(log_text)
+
                 shutil.copy2(compiled_pdf_path, output_path)
                 reporter.info(f"Compiled PDF successfully with {engine}.")
-                compiled = True
-                break
+                return PdfCompileResult(engine=engine, overflow_warnings=overflow_warnings)
         except RuntimeError as error:
             compile_errors.append(f"{engine}: {error}")
             if latex_engine != "auto":
                 raise
             reporter.verbose(f"Engine {engine} failed; trying next available engine.")
 
-    if not compiled:
-        raise RuntimeError(
-            "Failed to compile PDF with all available engines.\n" + "\n\n".join(compile_errors)
+    raise RuntimeError(
+        "Failed to compile PDF with all available engines.\n" + "\n\n".join(compile_errors)
+    )
+
+
+def write_master_pdf(
+    output_path: Path,
+    volumes: List[Volume],
+    page_layout: PageLayout,
+    table_style: LatexTableStyle,
+    latex_engine: str,
+    latex_runs: int,
+    overflow_policy: str,
+    keep_pdf_tex: bool,
+    reporter: Reporter,
+) -> None:
+    reporter.info(f"Writing master document (pdf) with {len(volumes)} volumes...")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    current_layout = page_layout
+    compact_tables = False
+    document = ""
+
+    while True:
+        generated_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        document = build_latex_document(
+            volumes=volumes,
+            generated_utc=generated_utc,
+            page_layout=current_layout,
+            table_style=table_style,
+            compact_tables=compact_tables,
         )
+
+        compile_result = compile_pdf_document(
+            document=document,
+            output_path=output_path,
+            latex_engine=latex_engine,
+            latex_runs=latex_runs,
+            reporter=reporter,
+        )
+
+        if not compile_result.overflow_warnings:
+            break
+
+        report_overflow_warnings(
+            compile_result.overflow_warnings,
+            output_path=output_path,
+            page_layout=current_layout,
+            compact_tables=compact_tables,
+        )
+        action = choose_overflow_action(overflow_policy)
+        if action == "keep":
+            reporter.info("Keeping PDF output despite overflow warnings.")
+            break
+        if action == "abort":
+            raise RuntimeError(
+                "Aborted: overflow warnings indicate text did not fully fit on the page."
+            )
+        if action == "fit":
+            if compact_tables:
+                raise RuntimeError(
+                    "Compact fit mode is already enabled but overflow warnings still remain."
+                )
+            compact_tables = True
+            reporter.info("Retrying with compact table mode to fit content.")
+            continue
+        if action == "larger-page":
+            larger_layout = resolve_page_layout(
+                paper_size="11x17",
+                orientation="landscape",
+                page_width=None,
+                page_height=None,
+                page_margin=current_layout.margin,
+            )
+            if larger_layout.geometry_options == current_layout.geometry_options:
+                raise RuntimeError(
+                    "Already using 11x17 landscape layout; cannot auto-enlarge further."
+                )
+            current_layout = larger_layout
+            compact_tables = False
+            reporter.info(
+                "Retrying with larger page layout (11x17 landscape) to reduce overflow."
+            )
+            continue
+        raise RuntimeError(f"Unsupported overflow action: {action}")
 
     if keep_pdf_tex:
         sidecar_tex = output_path.with_suffix(".tex")
@@ -1001,8 +1429,10 @@ def write_master(
     volumes: List[Volume],
     output_format: str,
     page_layout: PageLayout,
+    table_style: LatexTableStyle,
     latex_engine: str,
     latex_runs: int,
+    overflow_policy: str,
     keep_pdf_tex: bool,
     reporter: Reporter,
 ) -> None:
@@ -1021,6 +1451,7 @@ def write_master(
             output_path=output_path,
             volumes=volumes,
             page_layout=page_layout,
+            table_style=table_style,
             reporter=reporter,
         )
         return
@@ -1029,8 +1460,10 @@ def write_master(
             output_path=output_path,
             volumes=volumes,
             page_layout=page_layout,
+            table_style=table_style,
             latex_engine=latex_engine,
             latex_runs=latex_runs,
+            overflow_policy=overflow_policy,
             keep_pdf_tex=keep_pdf_tex,
             reporter=reporter,
         )
@@ -1040,12 +1473,12 @@ def write_master(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Assemble source volumes into the master The Tuning Encyclopedia file."
+        description="Assemble source volumes into the master The Interval Encoclpaedia file."
     )
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("the-tuning-encyclopedia.txt"),
+        default=Path("the-interval-encoclpaedia.txt"),
         help="Master output path (.txt/.csv/.json/.tex/.pdf or set --output-format).",
     )
     parser.add_argument(
@@ -1070,6 +1503,15 @@ def parse_args() -> argparse.Namespace:
         "--pdf-keep-tex",
         action="store_true",
         help="When generating PDF, also write a sidecar .tex file next to the PDF output.",
+    )
+    parser.add_argument(
+        "--overflow-policy",
+        choices=OVERFLOW_POLICY_CHOICES,
+        default="ask",
+        help=(
+            "How to handle PDF overflow warnings when text does not fit the page: "
+            "ask, keep, abort, fit, or larger-page."
+        ),
     )
     parser.add_argument(
         "--paper-size",
@@ -1099,6 +1541,159 @@ def parse_args() -> argparse.Namespace:
         "--page-margin",
         default="1in",
         help="Page margin for LaTeX/PDF output, with unit (default: 1in).",
+    )
+    parser.add_argument(
+        "--table-font-size",
+        choices=TABLE_FONT_SIZE_CHOICES,
+        default="scriptsize",
+        help="LaTeX table font size in normal mode (default: scriptsize).",
+    )
+    parser.add_argument(
+        "--table-fit-font-size",
+        choices=TABLE_FONT_SIZE_CHOICES,
+        default="tiny",
+        help="LaTeX table font size in overflow fit mode (default: tiny).",
+    )
+    parser.add_argument(
+        "--table-tabcolsep-pt",
+        type=float,
+        default=4.0,
+        help="LaTeX table horizontal cell padding in pt for normal mode (default: 4.0).",
+    )
+    parser.add_argument(
+        "--table-fit-tabcolsep-pt",
+        type=float,
+        default=2.0,
+        help="LaTeX table horizontal cell padding in pt for fit mode (default: 2.0).",
+    )
+    parser.add_argument(
+        "--table-arraystretch",
+        type=float,
+        default=1.15,
+        help="LaTeX table row stretch multiplier (default: 1.15).",
+    )
+    parser.add_argument(
+        "--table-extra-row-height-pt",
+        type=float,
+        default=0.6,
+        help="Extra row height added to every table row in pt (default: 0.6).",
+    )
+    parser.add_argument(
+        "--table-row-strut-ex",
+        type=float,
+        default=2.6,
+        help="Minimum row strut height in ex units applied to each cell (default: 2.6).",
+    )
+    parser.add_argument(
+        "--table-usable-width",
+        type=float,
+        default=0.98,
+        help="Fraction of linewidth allocated to longtable columns in normal mode (default: 0.98).",
+    )
+    parser.add_argument(
+        "--table-fit-usable-width",
+        type=float,
+        default=0.995,
+        help="Fraction of linewidth allocated to longtable columns in fit mode (default: 0.995).",
+    )
+    parser.add_argument(
+        "--table-min-column-width",
+        type=float,
+        default=0.04,
+        help="Minimum linewidth fraction for any table column (default: 0.04).",
+    )
+    parser.add_argument(
+        "--table-emergency-stretch-em",
+        type=float,
+        default=2.0,
+        help="LaTeX emergencystretch value in em to reduce overfull boxes (default: 2.0).",
+    )
+    parser.add_argument(
+        "--table-break-long-tokens",
+        dest="table_break_long_tokens",
+        action="store_true",
+        help="Insert soft breakpoints into long text tokens in LaTeX/PDF tables.",
+    )
+    parser.add_argument(
+        "--no-table-break-long-tokens",
+        dest="table_break_long_tokens",
+        action="store_false",
+        help="Disable long-token soft break insertion in LaTeX/PDF tables.",
+    )
+    parser.set_defaults(table_break_long_tokens=True)
+    parser.add_argument(
+        "--table-break-chunk",
+        type=int,
+        default=14,
+        help="Character chunk size for inserted long-token soft breaks (default: 14).",
+    )
+    parser.add_argument(
+        "--table-max-decimals",
+        type=int,
+        default=12,
+        help=(
+            "Maximum fractional digits shown for plain decimal numeric fields in LaTeX/PDF tables "
+            "(default: 12; set to a large value to preserve more digits)."
+        ),
+    )
+    parser.add_argument(
+        "--table-trim-trailing-zeros",
+        dest="table_trim_trailing_zeros",
+        action="store_true",
+        help="Trim trailing zeros from rendered decimal values in LaTeX/PDF tables.",
+    )
+    parser.add_argument(
+        "--no-table-trim-trailing-zeros",
+        dest="table_trim_trailing_zeros",
+        action="store_false",
+        help="Keep trailing zeros in rendered decimal values in LaTeX/PDF tables.",
+    )
+    parser.set_defaults(table_trim_trailing_zeros=True)
+    parser.add_argument(
+        "--table-zebra",
+        action="store_true",
+        help="Enable subtle alternating row shading in LaTeX/PDF tables.",
+    )
+    parser.add_argument(
+        "--table-zebra-black-pct",
+        type=float,
+        default=2.5,
+        help="Black percentage for zebra stripe shading (default: 2.5).",
+    )
+    parser.add_argument(
+        "--table-header-shade",
+        action="store_true",
+        help="Enable header-row background shading in LaTeX/PDF tables.",
+    )
+    parser.add_argument(
+        "--table-header-black-pct",
+        type=float,
+        default=7.5,
+        help="Black percentage for header-row shading (default: 7.5).",
+    )
+    parser.add_argument(
+        "--table-weight-text",
+        type=float,
+        default=2.6,
+        help="Relative width weight for wide text-like columns (default: 2.6).",
+    )
+    parser.add_argument(
+        "--table-weight-math",
+        type=float,
+        default=1.8,
+        help="Relative width weight for math columns (default: 1.8).",
+    )
+    parser.add_argument(
+        "--table-weight-numeric",
+        type=float,
+        default=1.2,
+        help="Relative width weight for numeric columns (default: 1.2).",
+    )
+    parser.add_argument(
+        "--table-weight-other",
+        type=float,
+        default=1.5,
+        help="Relative width weight for all other columns (default: 1.5).",
     )
 
     parser.add_argument(
@@ -1183,6 +1778,40 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError("--max-edo must be >= 1.")
     if args.latex_runs < 1:
         raise ValueError("--latex-runs must be >= 1.")
+    if args.table_tabcolsep_pt <= 0:
+        raise ValueError("--table-tabcolsep-pt must be > 0.")
+    if args.table_fit_tabcolsep_pt <= 0:
+        raise ValueError("--table-fit-tabcolsep-pt must be > 0.")
+    if args.table_arraystretch <= 0:
+        raise ValueError("--table-arraystretch must be > 0.")
+    if args.table_extra_row_height_pt < 0:
+        raise ValueError("--table-extra-row-height-pt must be >= 0.")
+    if args.table_row_strut_ex <= 0:
+        raise ValueError("--table-row-strut-ex must be > 0.")
+    if not (0 < args.table_usable_width <= 1):
+        raise ValueError("--table-usable-width must be in the range (0, 1].")
+    if not (0 < args.table_fit_usable_width <= 1):
+        raise ValueError("--table-fit-usable-width must be in the range (0, 1].")
+    if not (0 < args.table_min_column_width < 1):
+        raise ValueError("--table-min-column-width must be in the range (0, 1).")
+    if args.table_emergency_stretch_em < 0:
+        raise ValueError("--table-emergency-stretch-em must be >= 0.")
+    if args.table_break_chunk < 2:
+        raise ValueError("--table-break-chunk must be >= 2.")
+    if args.table_max_decimals < 0:
+        raise ValueError("--table-max-decimals must be >= 0.")
+    if not (0 <= args.table_zebra_black_pct < 100):
+        raise ValueError("--table-zebra-black-pct must be in the range [0, 100).")
+    if not (0 <= args.table_header_black_pct < 100):
+        raise ValueError("--table-header-black-pct must be in the range [0, 100).")
+    if args.table_weight_text <= 0:
+        raise ValueError("--table-weight-text must be > 0.")
+    if args.table_weight_math <= 0:
+        raise ValueError("--table-weight-math must be > 0.")
+    if args.table_weight_numeric <= 0:
+        raise ValueError("--table-weight-numeric must be > 0.")
+    if args.table_weight_other <= 0:
+        raise ValueError("--table-weight-other must be > 0.")
     # Validate page layout options up front so PDF/LaTeX modes fail early with clear messages.
     resolve_page_layout(
         paper_size=args.paper_size,
@@ -1197,6 +1826,34 @@ def validate_args(args: argparse.Namespace) -> None:
     if extra_source is not None and not extra_source.exists():
         raise FileNotFoundError(f"Historical extra source file not found: {extra_source}.")
     validate_output_control_args(args)
+
+
+def resolve_table_style(args: argparse.Namespace) -> LatexTableStyle:
+    return LatexTableStyle(
+        font_size=args.table_font_size,
+        fit_font_size=args.table_fit_font_size,
+        tabcolsep_pt=args.table_tabcolsep_pt,
+        fit_tabcolsep_pt=args.table_fit_tabcolsep_pt,
+        arraystretch=args.table_arraystretch,
+        extra_row_height_pt=args.table_extra_row_height_pt,
+        row_strut_ex=args.table_row_strut_ex,
+        usable_width=args.table_usable_width,
+        fit_usable_width=args.table_fit_usable_width,
+        min_column_width=args.table_min_column_width,
+        emergency_stretch_em=args.table_emergency_stretch_em,
+        break_long_tokens=args.table_break_long_tokens,
+        break_chunk=args.table_break_chunk,
+        max_decimals=args.table_max_decimals,
+        trim_trailing_zeros=args.table_trim_trailing_zeros,
+        zebra=args.table_zebra,
+        zebra_black_pct=args.table_zebra_black_pct,
+        header_shade=args.table_header_shade,
+        header_black_pct=args.table_header_black_pct,
+        weight_text=args.table_weight_text,
+        weight_math=args.table_weight_math,
+        weight_numeric=args.table_weight_numeric,
+        weight_other=args.table_weight_other,
+    )
 
 
 def build_forwarded_output_switches(args: argparse.Namespace) -> List[str]:
@@ -1223,6 +1880,7 @@ def main() -> None:
     args = parse_args()
     validate_args(args)
     reporter = create_reporter(args)
+    table_style = resolve_table_style(args)
     page_layout = resolve_page_layout(
         paper_size=args.paper_size,
         orientation=args.orientation,
@@ -1310,11 +1968,11 @@ def main() -> None:
     source_progress.finish()
 
     volumes = [
-        read_volume("JUST", "Volume I - Just Intervals", args.just_input),
-        read_volume("TEMPERED", "Volume II - Equal Tempered Intervals", args.tempered_input),
+        read_volume("JUST", "Just Intervals", args.just_input),
+        read_volume("TEMPERED", "Equal-Tempered Intervals", args.tempered_input),
         read_volume(
             "HISTORICAL",
-            "Volume III - Historical and Esoteric Irrational Intervals",
+            "Historical and Esoteric Irrational Intervals",
             args.historical_input,
         ),
     ]
@@ -1323,8 +1981,10 @@ def main() -> None:
         volumes,
         output_format=args.output_format,
         page_layout=page_layout,
+        table_style=table_style,
         latex_engine=args.latex_engine,
         latex_runs=args.latex_runs,
+        overflow_policy=args.overflow_policy,
         keep_pdf_tex=args.pdf_keep_tex,
         reporter=reporter,
     )

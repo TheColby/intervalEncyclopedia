@@ -189,6 +189,17 @@ Per EDO $N$, the step range is:
 - $k=0..N-1$ if octave excluded,
 - $k=1..N-1$ if both excluded.
 
+### Ordering policy
+
+Default output order is global ratio sorting:
+
+$$
+r_1 \le r_2 \le \dots \le r_m,
+$$
+
+controlled by `--sort-by ratio` (default).  
+Legacy grouped order remains available via `--sort-by edo-step`.
+
 ### Naming policy
 
 `edo_interval_name(step, edo)` produces human labels, for example:
@@ -257,7 +268,8 @@ Default generated-family ranges are intentionally moderate:
 ### Key Data Models
 
 - `HistoricalInterval`
-  - `slug`, `name`, `expression`, `value`, `tradition`, `note`
+  - `slug`, `name`, `expression`, `value`, `tradition`, `note`,
+    `subgroup_monzo`, `fjs_name`, `comma_size`, `xen_url`
 - `Annotation`
   - family metadata templates for generated rows
 - `CarlosScale`
@@ -315,8 +327,12 @@ If parsing fails (irrational expressions), output is `-`.
   - `read_scribd_interval_tsv(path)`
   - `read_miraheze_interval_tsv(path)`
   - `read_huygens_fokker_interval_tsv(path)`
+  - `read_xenharmonic_wiki_interval_tsv(path)`
 
-These readers preserve provenance fields in notes where present.
+These readers preserve provenance fields in notes where present.  
+Xenharmonic Wiki imports additionally carry optional metadata fields:
+`subgroup_monzo`, `fjs_name`, `comma_size`, and `xen_url`.
+Reference site: [Xenharmonic Wiki](https://en.xen.wiki/).
 
 ### Output serializers
 
@@ -343,7 +359,7 @@ If generated-family row count is $G$ and imported-source row count is $S$:
 
 ### Goal
 
-Orchestrate source generation and produce the stitched master **The Tuning Encyclopedia** in text, data, or typeset-book formats.
+Orchestrate source generation and produce the stitched master **The Interval Encoclpaedia** in text, data, or typeset-book formats.
 
 ### Pipeline
 
@@ -419,10 +435,29 @@ when `--latex-engine auto` is selected. The `--latex-runs` value controls compil
 
 Column alignment details:
 
-- table columns are generated with fixed proportional widths (`p{...}`),
+- table columns are generated with proportional `p{...}` widths and tabcolsep-aware width adjustment,
 - numeric fields use right-aligned cells,
 - text and expression fields use ragged-right cells,
-- alignment rules are applied consistently across volume tables and the volume index.
+- alignment rules are applied consistently across volume tables and the volume index,
+- longtable headers are repeated with consistent `booktabs` rules across page breaks,
+- each data row uses a configurable row strut to prevent row collisions.
+
+Advanced LaTeX/PDF table style controls are resolved into a `LatexTableStyle` object and applied in both `.tex` and `.pdf` output modes. Key controls include:
+
+- typography and spacing:
+  `--table-font-size`, `--table-fit-font-size`,
+  `--table-tabcolsep-pt`, `--table-fit-tabcolsep-pt`,
+  `--table-arraystretch`, `--table-extra-row-height-pt`, `--table-row-strut-ex`,
+- width and fitting behavior:
+  `--table-usable-width`, `--table-fit-usable-width`, `--table-min-column-width`,
+  `--table-weight-text`, `--table-weight-math`, `--table-weight-numeric`, `--table-weight-other`,
+  `--table-emergency-stretch-em`,
+- wrapping and numeric formatting:
+  `--table-break-long-tokens`, `--no-table-break-long-tokens`, `--table-break-chunk`,
+  `--table-max-decimals`, `--table-trim-trailing-zeros`, `--no-table-trim-trailing-zeros`,
+- optional table shading:
+  `--table-zebra`, `--table-zebra-black-pct`,
+  `--table-header-shade`, `--table-header-black-pct`.
 
 ## 6) Musical Interval Table Export (`generate-musical-intervals-csv.py`)
 
@@ -455,11 +490,12 @@ Supported output formats are `csv` and `json` via `--output-format` (`auto` by e
 Columns:
 
 1. `ratio`
-2. `prime_factorization`
-3. `cents`
-4. `largest_prime`
-5. `odd_limit`
-6. `common_name`
+2. `ratio_decimal`
+3. `prime_factorization`
+4. `cents`
+5. `largest_prime`
+6. `odd_limit`
+7. `common_name`
 
 ### Tempered table
 
@@ -483,8 +519,12 @@ Columns:
 4. `prime_factorization`
 5. `cents`
 6. `expression`
-7. `tradition`
-8. `note`
+7. `subgroup_monzo`
+8. `fjs_name`
+9. `comma_size`
+10. `xen_url`
+11. `tradition`
+12. `note`
 
 ### Master CSV table
 
@@ -517,7 +557,7 @@ Each `volumes[i]` contains:
 
 Document-level elements:
 
-1. title page: `The Tuning Encyclopedia`,
+1. title page: `The Interval Encoclpaedia`,
 2. table of contents,
 3. volume index chapter,
 4. one chapter per source volume with verbatim content blocks,
@@ -580,7 +620,7 @@ python3 /Users/cleider/dev/intervalEncoclopedia/generate-master-encyclopedia.py 
 
 python3 /Users/cleider/dev/intervalEncoclopedia/generate-master-encyclopedia.py \
   --skip-generation \
-  --output /tmp/the-tuning-encyclopedia-smoke.pdf \
+  --output /tmp/the-interval-encoclpaedia-smoke.pdf \
   --output-format pdf \
   --latex-engine auto \
   --latex-runs 2 \
