@@ -6,7 +6,7 @@
 2. equal-tempered intervals,
 3. historical/esoteric interval systems (including irrational and non-octave families).
 
-The repository is designed for both computational analysis and publication workflows (plain-text volumes and stitched master tome output).
+The repository is designed for both computational analysis and publication workflows (plain-text volumes and stitched master tome output). The compiled master tome is called "The Tuning Encyclopedia."
 
 ## Why This Exists
 
