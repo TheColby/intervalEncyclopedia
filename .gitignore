@@ -6,4 +6,6 @@ __pycache__/
 just-intervals.txt
 tempered-intervals.txt
 historical-intervals.txt
-interval-thesaurus-master.txt
+interval-encyclopedia-master.txt
+
+musical-intervals.csv
