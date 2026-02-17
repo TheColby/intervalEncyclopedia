@@ -307,6 +307,12 @@ Behavior:
 - accepts mixed source formats for `--just-input`, `--tempered-input`, and `--historical-input` (`.txt`, `.csv`, `.json`),
 - forwards `--historical-extra-source` to the historical generator (legacy alias: `--historical-extra-json`),
 - supports PDF compile controls with `--latex-engine`, `--latex-runs`, and `--pdf-keep-tex`,
+- supports page layout controls for LaTeX/PDF:
+  `--paper-size`, `--orientation`, `--page-width`, `--page-height`, `--page-margin`,
+- supports standard presets including `us-letter`, `us-legal`, `a4`, and `11x17` (plus `a3`, `a5`, `b5`, `executive`),
+- allows arbitrary page sizes with `--page-width` and `--page-height` (unit required, e.g. `11in`, `279mm`),
+- renders interval expressions mathematically in LaTeX/PDF output (for example prime factorizations and symbolic expressions are typeset as equations),
+- uses aligned fixed-width LaTeX table columns for all volume/index tables in LaTeX/PDF output,
 - writes volume markers only for text master output:
   `%%<VOLUME:JUST:BEGIN>` ... `%%<VOLUME:JUST:END>`,
   `%%<VOLUME:TEMPERED:BEGIN>` ... `%%<VOLUME:TEMPERED:END>`,
@@ -331,6 +337,30 @@ python3 /Users/cleider/dev/intervalEncoclopedia/generate-master-encyclopedia.py 
   --latex-engine auto \
   --latex-runs 2 \
   --pdf-keep-tex
+```
+
+Generate a landscape 11x17 PDF:
+
+```bash
+python3 /Users/cleider/dev/intervalEncoclopedia/generate-master-encyclopedia.py \
+  --skip-generation \
+  --output /Users/cleider/dev/intervalEncoclopedia/the-tuning-encyclopedia-11x17-landscape.pdf \
+  --output-format pdf \
+  --paper-size 11x17 \
+  --orientation landscape
+```
+
+Generate a custom-size PDF (arbitrary page dimensions):
+
+```bash
+python3 /Users/cleider/dev/intervalEncoclopedia/generate-master-encyclopedia.py \
+  --skip-generation \
+  --output /Users/cleider/dev/intervalEncoclopedia/the-tuning-encyclopedia-custom.pdf \
+  --output-format pdf \
+  --page-width 14in \
+  --page-height 8.5in \
+  --orientation landscape \
+  --page-margin 0.75in
 ```
 
 ## Musical Table Export
