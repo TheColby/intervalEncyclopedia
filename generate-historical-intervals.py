@@ -13,6 +13,7 @@ The default corpus intentionally scales into tens of thousands of rows by combin
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import math
 import re
@@ -20,7 +21,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from fractions import Fraction
 from pathlib import Path
-from typing import Dict, Iterable, List
+from typing import Any, Dict, Iterable, List, Tuple
 
 from cli_output import (
     Reporter,
@@ -28,6 +29,29 @@ from cli_output import (
     create_reporter,
     validate_output_control_args,
 )
+
+
+OUTPUT_FORMAT_CHOICES = ("auto", "txt", "csv", "json")
+
+
+def infer_output_format(output_path: Path, requested_format: str) -> str:
+    if requested_format != "auto":
+        return requested_format
+    suffix = output_path.suffix.lower()
+    if suffix == ".csv":
+        return "csv"
+    if suffix == ".json":
+        return "json"
+    return "txt"
+
+
+def infer_source_format(path: Path) -> str:
+    suffix = path.suffix.lower()
+    if suffix == ".json":
+        return "json"
+    if suffix == ".csv":
+        return "csv"
+    return "tsv"
 
 
 @dataclass(frozen=True)
@@ -268,29 +292,80 @@ def clean_field(text: str) -> str:
     return text.replace("\t", " ").replace("\n", " ").strip()
 
 
-def read_extra_json(path: Path) -> List[HistoricalInterval]:
-    with path.open("r", encoding="utf-8") as handle:
-        payload = json.load(handle)
-    if not isinstance(payload, list):
-        raise ValueError("Extra interval JSON must be a list of objects.")
+def read_extra_intervals(path: Path) -> List[HistoricalInterval]:
+    source_format = infer_source_format(path)
 
+    if source_format == "json":
+        with path.open("r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+        items: Any
+        if isinstance(payload, dict):
+            if isinstance(payload.get("rows"), list):
+                items = payload["rows"]
+            elif isinstance(payload.get("data"), list):
+                items = payload["data"]
+            else:
+                raise ValueError(
+                    "Extra JSON must be a list, or an object with 'rows' or 'data' list."
+                )
+        elif isinstance(payload, list):
+            items = payload
+        else:
+            raise ValueError("Extra JSON must be a list of objects.")
+
+        records: List[HistoricalInterval] = []
+        for index, item in enumerate(items):
+            if not isinstance(item, dict):
+                raise ValueError(f"Extra JSON item {index} is not an object.")
+            try:
+                record = HistoricalInterval(
+                    slug=str(item["slug"]).strip(),
+                    name=str(item["name"]).strip(),
+                    expression=str(item["expression"]).strip(),
+                    value=float(item["value"]),
+                    tradition=str(item.get("tradition", "user-supplied")).strip(),
+                    note=str(item.get("note", "")).strip(),
+                )
+            except KeyError as error:
+                raise ValueError(f"Extra JSON item {index} is missing required key: {error}") from error
+            records.append(record)
+        return records
+
+    delimiter = "," if source_format == "csv" else "\t"
     records: List[HistoricalInterval] = []
-    for index, item in enumerate(payload):
-        if not isinstance(item, dict):
-            raise ValueError(f"JSON item {index} is not an object.")
-        try:
-            record = HistoricalInterval(
-                slug=str(item["slug"]),
-                name=str(item["name"]),
-                expression=str(item["expression"]),
-                value=float(item["value"]),
-                tradition=str(item.get("tradition", "user-supplied")),
-                note=str(item.get("note", "")),
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.reader(handle, delimiter=delimiter)
+        for line_number, raw_parts in enumerate(reader, start=1):
+            if not raw_parts:
+                continue
+            if raw_parts[0].lstrip().startswith("#"):
+                continue
+            parts = [part.strip() for part in raw_parts]
+            if not any(parts):
+                continue
+            if parts[0].lower() == "slug":
+                continue
+            if len(parts) < 4:
+                raise ValueError(
+                    f"Extra source parse error at line {line_number}: expected at least "
+                    "'slug, name, expression, value'."
+                )
+            records.append(
+                HistoricalInterval(
+                    slug=parts[0],
+                    name=parts[1] or "(unnamed interval)",
+                    expression=parts[2],
+                    value=float(parts[3]),
+                    tradition=parts[4] if len(parts) > 4 and parts[4] else "user-supplied",
+                    note=parts[5] if len(parts) > 5 else "",
+                )
             )
-        except KeyError as error:
-            raise ValueError(f"JSON item {index} is missing required key: {error}") from error
-        records.append(record)
     return records
+
+
+def read_extra_json(path: Path) -> List[HistoricalInterval]:
+    # Backward-compatible alias for existing CLI option naming.
+    return read_extra_intervals(path)
 
 
 def parse_ratio_fraction(text: str) -> Fraction:
@@ -384,181 +459,166 @@ def octave_reduce_fraction(value: Fraction) -> Fraction:
     return reduced
 
 
-def read_scribd_interval_tsv(path: Path) -> List[HistoricalInterval]:
-    rows: List[HistoricalInterval] = []
-    row_count = 0
-    with path.open("r", encoding="utf-8") as handle:
-        for line_number, raw in enumerate(handle, start=1):
-            line = raw.strip()
-            if not line or line.startswith("#"):
-                continue
-            if line.lower().startswith("ratio\t"):
-                continue
+def format_source_provenance(source_page: str, source_url: str) -> str:
+    if source_page and source_url:
+        return f" Source page: {source_page} ({source_url})."
+    if source_page:
+        return f" Source page: {source_page}."
+    if source_url:
+        return f" Source: {source_url}."
+    return ""
 
-            parts = line.split("\t", 1)
-            if len(parts) != 2:
-                raise ValueError(
-                    f"Scribd TSV parse error at line {line_number}: expected 'ratio<TAB>name'."
-                )
 
-            ratio_text = parts[0].strip()
-            interval_name = parts[1].strip() or "(unnamed interval)"
-            ratio_fraction = parse_ratio_fraction(ratio_text)
-            reduced_fraction = octave_reduce_fraction(ratio_fraction)
-            row_count += 1
+def load_ratio_name_records(
+    path: Path,
+    *,
+    source_label: str,
+) -> List[Tuple[str, str, str, str]]:
+    source_format = infer_source_format(path)
+    records: List[Tuple[str, str, str, str]] = []
 
-            reduced_text = f"{reduced_fraction.numerator}/{reduced_fraction.denominator}"
-            if reduced_fraction == ratio_fraction:
-                expression = ratio_text
-                note = "Imported from Scribd List of intervals without octave reduction."
+    if source_format == "json":
+        with path.open("r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+        items: Any
+        if isinstance(payload, dict):
+            if isinstance(payload.get("rows"), list):
+                items = payload["rows"]
+            elif isinstance(payload.get("data"), list):
+                items = payload["data"]
             else:
-                expression = f"{reduced_text} (from {ratio_text})"
-                note = (
-                    "Imported from Scribd List of intervals and octave-reduced to project range."
+                raise ValueError(
+                    f"{source_label} JSON must be a list, or an object with 'rows' or 'data'."
                 )
+        elif isinstance(payload, list):
+            items = payload
+        else:
+            raise ValueError(f"{source_label} JSON must be a list or object.")
 
-            rows.append(
-                HistoricalInterval(
-                    slug=f"scribd_{row_count:04d}",
-                    name=interval_name,
-                    expression=expression,
-                    value=float(reduced_fraction),
-                    tradition=(
-                        "Scribd List of intervals compilation (historical/esoteric mixed sources)"
-                    ),
-                    note=note,
+        for index, item in enumerate(items, start=1):
+            if isinstance(item, dict):
+                ratio_text = str(item.get("ratio", "")).strip()
+                interval_name = str(item.get("name", "")).strip()
+                source_page = str(item.get("source_page", "")).strip()
+                source_url = str(item.get("source_url", "")).strip()
+            elif isinstance(item, (list, tuple)) and len(item) >= 2:
+                ratio_text = str(item[0]).strip()
+                interval_name = str(item[1]).strip()
+                source_page = str(item[2]).strip() if len(item) > 2 else ""
+                source_url = str(item[3]).strip() if len(item) > 3 else ""
+            else:
+                raise ValueError(f"{source_label} JSON item {index} has unsupported shape.")
+
+            if not ratio_text:
+                raise ValueError(f"{source_label} JSON item {index} is missing ratio.")
+            records.append((ratio_text, interval_name, source_page, source_url))
+        return records
+
+    delimiter = "," if source_format == "csv" else "\t"
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.reader(handle, delimiter=delimiter)
+        for line_number, raw_parts in enumerate(reader, start=1):
+            if not raw_parts:
+                continue
+            if raw_parts[0].lstrip().startswith("#"):
+                continue
+            parts = [part.strip() for part in raw_parts]
+            if not any(parts):
+                continue
+            if parts[0].lower() == "ratio":
+                continue
+            if len(parts) < 2:
+                raise ValueError(
+                    f"{source_label} parse error at line {line_number}: "
+                    "expected at least 'ratio,name'."
                 )
+            ratio_text = parts[0]
+            interval_name = parts[1]
+            source_page = parts[2] if len(parts) > 2 else ""
+            source_url = parts[3] if len(parts) > 3 else ""
+            records.append((ratio_text, interval_name, source_page, source_url))
+    return records
+
+
+def build_ratio_import_rows(
+    *,
+    records: List[Tuple[str, str, str, str]],
+    slug_prefix: str,
+    tradition: str,
+    note_without_reduction: str,
+    note_with_reduction: str,
+) -> List[HistoricalInterval]:
+    rows: List[HistoricalInterval] = []
+    for row_count, (ratio_text, raw_interval_name, source_page, source_url) in enumerate(
+        records,
+        start=1,
+    ):
+        interval_name = raw_interval_name or "(unnamed interval)"
+        ratio_fraction = parse_ratio_fraction(ratio_text)
+        reduced_fraction = octave_reduce_fraction(ratio_fraction)
+        reduced_text = f"{reduced_fraction.numerator}/{reduced_fraction.denominator}"
+
+        if reduced_fraction == ratio_fraction:
+            expression = ratio_text
+            reduction_note = note_without_reduction
+        else:
+            expression = f"{reduced_text} (from {ratio_text})"
+            reduction_note = note_with_reduction
+
+        provenance = format_source_provenance(source_page=source_page, source_url=source_url)
+        rows.append(
+            HistoricalInterval(
+                slug=f"{slug_prefix}_{row_count:04d}",
+                name=interval_name,
+                expression=expression,
+                value=float(reduced_fraction),
+                tradition=tradition,
+                note=f"{reduction_note}{provenance}",
             )
+        )
 
     return rows
+
+
+def read_scribd_interval_tsv(path: Path) -> List[HistoricalInterval]:
+    return build_ratio_import_rows(
+        records=load_ratio_name_records(path, source_label="Scribd source"),
+        slug_prefix="scribd",
+        tradition="Scribd List of intervals compilation (historical/esoteric mixed sources)",
+        note_without_reduction="Imported from Scribd List of intervals without octave reduction.",
+        note_with_reduction=(
+            "Imported from Scribd List of intervals and octave-reduced to project range."
+        ),
+    )
 
 
 def read_miraheze_interval_tsv(path: Path) -> List[HistoricalInterval]:
-    rows: List[HistoricalInterval] = []
-    row_count = 0
-    with path.open("r", encoding="utf-8") as handle:
-        for line_number, raw in enumerate(handle, start=1):
-            line = raw.strip()
-            if not line or line.startswith("#"):
-                continue
-            if line.lower().startswith("ratio\t"):
-                continue
-
-            parts = line.split("\t")
-            if len(parts) < 2:
-                raise ValueError(
-                    f"Miraheze TSV parse error at line {line_number}: "
-                    "expected at least 'ratio<TAB>name'."
-                )
-
-            ratio_text = parts[0].strip()
-            interval_name = parts[1].strip() or "(unnamed interval)"
-            source_page = parts[2].strip() if len(parts) > 2 else ""
-            source_url = parts[3].strip() if len(parts) > 3 else ""
-
-            ratio_fraction = parse_ratio_fraction(ratio_text)
-            reduced_fraction = octave_reduce_fraction(ratio_fraction)
-            row_count += 1
-
-            reduced_text = f"{reduced_fraction.numerator}/{reduced_fraction.denominator}"
-            if reduced_fraction == ratio_fraction:
-                expression = ratio_text
-                reduction_note = (
-                    "Imported from Microtonal Encyclopedia (Miraheze) without octave reduction."
-                )
-            else:
-                expression = f"{reduced_text} (from {ratio_text})"
-                reduction_note = (
-                    "Imported from Microtonal Encyclopedia (Miraheze) and octave-reduced "
-                    "to project range."
-                )
-
-            provenance = ""
-            if source_page and source_url:
-                provenance = f" Source page: {source_page} ({source_url})."
-            elif source_page:
-                provenance = f" Source page: {source_page}."
-            elif source_url:
-                provenance = f" Source: {source_url}."
-
-            rows.append(
-                HistoricalInterval(
-                    slug=f"miraheze_{row_count:04d}",
-                    name=interval_name,
-                    expression=expression,
-                    value=float(reduced_fraction),
-                    tradition="Microtonal Encyclopedia (miraheze.org) interval pages",
-                    note=f"{reduction_note}{provenance}",
-                )
-            )
-
-    return rows
+    return build_ratio_import_rows(
+        records=load_ratio_name_records(path, source_label="Miraheze source"),
+        slug_prefix="miraheze",
+        tradition="Microtonal Encyclopedia (miraheze.org) interval pages",
+        note_without_reduction=(
+            "Imported from Microtonal Encyclopedia (Miraheze) without octave reduction."
+        ),
+        note_with_reduction=(
+            "Imported from Microtonal Encyclopedia (Miraheze) and octave-reduced to project range."
+        ),
+    )
 
 
 def read_huygens_fokker_interval_tsv(path: Path) -> List[HistoricalInterval]:
-    rows: List[HistoricalInterval] = []
-    row_count = 0
-    with path.open("r", encoding="utf-8") as handle:
-        for line_number, raw in enumerate(handle, start=1):
-            line = raw.strip()
-            if not line or line.startswith("#"):
-                continue
-            if line.lower().startswith("ratio\t"):
-                continue
-
-            parts = line.split("\t")
-            if len(parts) < 2:
-                raise ValueError(
-                    f"Huygens-Fokker TSV parse error at line {line_number}: "
-                    "expected at least 'ratio<TAB>name'."
-                )
-
-            ratio_text = parts[0].strip()
-            interval_name = parts[1].strip() or "(unnamed interval)"
-            source_page = parts[2].strip() if len(parts) > 2 else ""
-            source_url = parts[3].strip() if len(parts) > 3 else ""
-
-            ratio_fraction = parse_ratio_fraction(ratio_text)
-            reduced_fraction = octave_reduce_fraction(ratio_fraction)
-            row_count += 1
-
-            reduced_text = f"{reduced_fraction.numerator}/{reduced_fraction.denominator}"
-            if reduced_fraction == ratio_fraction:
-                expression = ratio_text
-                reduction_note = (
-                    "Imported from Huygens-Fokker Bohlen-Pierce interval tables "
-                    "without octave reduction."
-                )
-            else:
-                expression = f"{reduced_text} (from {ratio_text})"
-                reduction_note = (
-                    "Imported from Huygens-Fokker Bohlen-Pierce interval tables and "
-                    "octave-reduced to project range."
-                )
-
-            provenance = ""
-            if source_page and source_url:
-                provenance = f" Source page: {source_page} ({source_url})."
-            elif source_page:
-                provenance = f" Source page: {source_page}."
-            elif source_url:
-                provenance = f" Source: {source_url}."
-
-            rows.append(
-                HistoricalInterval(
-                    slug=f"huygens_fokker_{row_count:04d}",
-                    name=interval_name,
-                    expression=expression,
-                    value=float(reduced_fraction),
-                    tradition=(
-                        "Huygens-Fokker Bohlen-Pierce Site "
-                        "(huygens-fokker.org/bpsite) interval tables"
-                    ),
-                    note=f"{reduction_note}{provenance}",
-                )
-            )
-
-    return rows
+    return build_ratio_import_rows(
+        records=load_ratio_name_records(path, source_label="Huygens-Fokker source"),
+        slug_prefix="huygens_fokker",
+        tradition="Huygens-Fokker Bohlen-Pierce Site (huygens-fokker.org/bpsite) interval tables",
+        note_without_reduction=(
+            "Imported from Huygens-Fokker Bohlen-Pierce interval tables without octave reduction."
+        ),
+        note_with_reduction=(
+            "Imported from Huygens-Fokker Bohlen-Pierce interval tables and octave-reduced "
+            "to project range."
+        ),
+    )
 
 
 def format_power_expression(base_expression: str, step: int, divisions: int) -> str:
@@ -753,9 +813,10 @@ def build_interval_corpus(args: argparse.Namespace, reporter: Reporter) -> List[
         )
         rows.extend(read_huygens_fokker_interval_tsv(args.huygens_fokker_source))
 
-    if args.extra_json is not None:
-        reporter.verbose(f"Importing extra JSON intervals from {args.extra_json}...")
-        rows.extend(read_extra_json(args.extra_json))
+    effective_extra_source = args.extra_source or args.extra_json
+    if effective_extra_source is not None:
+        reporter.verbose(f"Importing extra intervals from {effective_extra_source}...")
+        rows.extend(read_extra_intervals(effective_extra_source))
 
     bounded = [entry for entry in rows if 1.0 <= entry.value <= 2.0]
     reporter.info("De-duplicating by slug and applying [1/1, 2/1] bounds...")
@@ -770,7 +831,13 @@ def parse_args() -> argparse.Namespace:
         "--output",
         type=Path,
         default=Path("historical-intervals.txt"),
-        help="Output text file path.",
+        help="Output path. Supports .txt/.csv/.json (or set --output-format).",
+    )
+    parser.add_argument(
+        "--output-format",
+        choices=OUTPUT_FORMAT_CHOICES,
+        default="auto",
+        help="Output format. Use 'auto' to infer from file extension.",
     )
     parser.add_argument(
         "--precision",
@@ -788,13 +855,22 @@ def parse_args() -> argparse.Namespace:
         "--extra-json",
         type=Path,
         default=None,
-        help="Optional JSON file with additional interval objects.",
+        help="Optional JSON file with additional interval objects (legacy alias).",
+    )
+    parser.add_argument(
+        "--extra-source",
+        type=Path,
+        default=None,
+        help=(
+            "Optional extra interval source in JSON/CSV/TSV with columns "
+            "slug,name,expression,value[,tradition,note]."
+        ),
     )
     parser.add_argument(
         "--scribd-source",
         type=Path,
         default=Path(__file__).resolve().parent / "sources" / "scribd-list-of-intervals.tsv",
-        help="TSV source for imported Scribd 'List of intervals' rows.",
+        help="Source for imported Scribd rows (.tsv/.csv/.json).",
     )
     parser.add_argument(
         "--exclude-scribd",
@@ -809,7 +885,7 @@ def parse_args() -> argparse.Namespace:
             / "sources"
             / "microtonal-miraheze-missing-intervals.tsv"
         ),
-        help="TSV source for imported Microtonal Encyclopedia (Miraheze) interval rows.",
+        help="Source for imported Microtonal Encyclopedia (Miraheze) rows (.tsv/.csv/.json).",
     )
     parser.add_argument(
         "--exclude-miraheze",
@@ -822,7 +898,7 @@ def parse_args() -> argparse.Namespace:
         default=(
             Path(__file__).resolve().parent / "sources" / "huygens-fokker-bpsite-intervals.tsv"
         ),
-        help="TSV source for imported Huygens-Fokker Bohlen-Pierce interval rows.",
+        help="Source for imported Huygens-Fokker rows (.tsv/.csv/.json).",
     )
     parser.add_argument(
         "--exclude-huygens-fokker",
@@ -838,7 +914,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-octave-edo",
         type=int,
-        default=200,
+        default=64,
         help="Maximum EDO division for the octave-family sweep.",
     )
     parser.add_argument(
@@ -850,7 +926,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-tritave-edt",
         type=int,
-        default=120,
+        default=32,
         help="Maximum EDT division for the tritave-family sweep.",
     )
     parser.add_argument(
@@ -862,7 +938,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-consonance-divisions",
         type=int,
-        default=120,
+        default=32,
         help="Maximum equal divisions for consonance families (3/2, 5/4, 7/6).",
     )
     add_output_control_args(parser)
@@ -879,6 +955,11 @@ def validate_range(minimum: int, maximum: int, label: str) -> None:
 def validate_args(args: argparse.Namespace) -> None:
     if args.precision < 0:
         raise ValueError("--precision must be >= 0.")
+    if args.extra_json is not None and args.extra_source is not None:
+        raise ValueError("Use only one of --extra-json or --extra-source.")
+    effective_extra_source = args.extra_source or args.extra_json
+    if effective_extra_source is not None and not effective_extra_source.exists():
+        raise FileNotFoundError(f"Extra source file not found: {effective_extra_source}.")
     if not args.exclude_scribd and not args.scribd_source.exists():
         raise FileNotFoundError(
             f"Scribd source file not found: {args.scribd_source}. "
@@ -917,42 +998,109 @@ def write_output(
     intervals: Iterable[HistoricalInterval],
     precision: int,
     sort_by: str,
-    used_extra_json: bool,
+    used_extra_source: bool,
+    output_format: str,
     reporter: Reporter,
 ) -> int:
     rows = list(intervals)
-    reporter.info(f"Writing {len(rows)} historical rows...")
-    with output_path.open("w", encoding="utf-8") as handle:
-        handle.write("# intervalEncyclopedia - Historical and Esoteric Irrationals\n")
-        handle.write(
-            f"# generated_utc={datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}\n"
-        )
-        handle.write(f"# sort_by={sort_by}\n")
-        handle.write(f"# used_extra_json={used_extra_json}\n")
-        handle.write(f"# total_rows={len(rows)}\n")
-        handle.write(
-            "slug\tname\tratio\tprime_factorization\tcents\texpression\ttradition\tnote\n"
-        )
+    resolved_format = infer_output_format(output_path=output_path, requested_format=output_format)
+    reporter.info(f"Writing {len(rows)} historical rows ({resolved_format})...")
 
-        progress = reporter.progress(total=len(rows), label="Historical rows")
-        written = 0
-        for interval in rows:
-            prime_factorization = interval_prime_factorization(interval)
-            cents = cents_from_ratio(interval.value)
-            handle.write(
-                f"{clean_field(interval.slug)}\t"
-                f"{clean_field(interval.name)}\t"
-                f"{interval.value:.{precision}f}\t"
-                f"{clean_field(prime_factorization)}\t"
-                f"{cents:.{precision}f}\t"
-                f"{clean_field(interval.expression)}\t"
-                f"{clean_field(interval.tradition)}\t"
-                f"{clean_field(interval.note)}\n"
-            )
-            written += 1
-            progress.update(written)
+    metadata = {
+        "title": "intervalEncyclopedia - Historical and Esoteric Irrationals",
+        "generated_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "sort_by": sort_by,
+        "used_extra_source": used_extra_source,
+        "total_rows": len(rows),
+        "output_format": resolved_format,
+    }
+    columns = [
+        "slug",
+        "name",
+        "ratio",
+        "prime_factorization",
+        "cents",
+        "expression",
+        "tradition",
+        "note",
+    ]
+    progress = reporter.progress(total=len(rows), label="Historical rows")
 
-        progress.finish()
+    with output_path.open("w", encoding="utf-8", newline="") as handle:
+        if resolved_format == "txt":
+            handle.write(f"# {metadata['title']}\n")
+            handle.write(f"# generated_utc={metadata['generated_utc']}\n")
+            handle.write(f"# sort_by={metadata['sort_by']}\n")
+            handle.write(f"# used_extra_source={metadata['used_extra_source']}\n")
+            handle.write(f"# total_rows={metadata['total_rows']}\n")
+            handle.write(f"# output_format={metadata['output_format']}\n")
+            handle.write("\t".join(columns) + "\n")
+            for written, interval in enumerate(rows, start=1):
+                prime_factorization = interval_prime_factorization(interval)
+                cents = cents_from_ratio(interval.value)
+                handle.write(
+                    f"{clean_field(interval.slug)}\t"
+                    f"{clean_field(interval.name)}\t"
+                    f"{interval.value:.{precision}f}\t"
+                    f"{clean_field(prime_factorization)}\t"
+                    f"{cents:.{precision}f}\t"
+                    f"{clean_field(interval.expression)}\t"
+                    f"{clean_field(interval.tradition)}\t"
+                    f"{clean_field(interval.note)}\n"
+                )
+                progress.update(written)
+        elif resolved_format == "csv":
+            writer = csv.DictWriter(handle, fieldnames=columns)
+            writer.writeheader()
+            for written, interval in enumerate(rows, start=1):
+                prime_factorization = interval_prime_factorization(interval)
+                cents = cents_from_ratio(interval.value)
+                writer.writerow(
+                    {
+                        "slug": clean_field(interval.slug),
+                        "name": clean_field(interval.name),
+                        "ratio": f"{interval.value:.{precision}f}",
+                        "prime_factorization": clean_field(prime_factorization),
+                        "cents": f"{cents:.{precision}f}",
+                        "expression": clean_field(interval.expression),
+                        "tradition": clean_field(interval.tradition),
+                        "note": clean_field(interval.note),
+                    }
+                )
+                progress.update(written)
+        elif resolved_format == "json":
+            handle.write("{\n")
+            handle.write(f'  "metadata": {json.dumps(metadata, ensure_ascii=False)},\n')
+            handle.write(f'  "columns": {json.dumps(columns, ensure_ascii=False)},\n')
+            handle.write('  "rows": [\n')
+            first = True
+            for written, interval in enumerate(rows, start=1):
+                prime_factorization = interval_prime_factorization(interval)
+                cents = cents_from_ratio(interval.value)
+                row = {
+                    "slug": clean_field(interval.slug),
+                    "name": clean_field(interval.name),
+                    "ratio": f"{interval.value:.{precision}f}",
+                    "prime_factorization": clean_field(prime_factorization),
+                    "cents": f"{cents:.{precision}f}",
+                    "expression": clean_field(interval.expression),
+                    "tradition": clean_field(interval.tradition),
+                    "note": clean_field(interval.note),
+                }
+                if first:
+                    handle.write(f"    {json.dumps(row, ensure_ascii=False)}")
+                    first = False
+                else:
+                    handle.write(f",\n    {json.dumps(row, ensure_ascii=False)}")
+                progress.update(written)
+            if not first:
+                handle.write("\n")
+            handle.write("  ]\n")
+            handle.write("}\n")
+        else:
+            raise ValueError(f"Unsupported output format: {resolved_format}")
+
+    progress.finish()
 
     return len(rows)
 
@@ -969,7 +1117,8 @@ def main() -> None:
         intervals=ordered,
         precision=args.precision,
         sort_by=args.sort_by,
-        used_extra_json=args.extra_json is not None,
+        used_extra_source=(args.extra_source is not None or args.extra_json is not None),
+        output_format=args.output_format,
         reporter=reporter,
     )
     reporter.print_result(f"Wrote {total} rows to {args.output}")

@@ -2,12 +2,14 @@
 """
 Generate equal-tempered interval tables for the intervalEncyclopedia.
 
-By default this outputs all steps for every EDO from 1 to 4800.
+By default this outputs all steps for every EDO from 1 to 96.
 """
 
 from __future__ import annotations
 
 import argparse
+import csv
+import json
 import math
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,6 +21,20 @@ from cli_output import (
     create_reporter,
     validate_output_control_args,
 )
+
+
+OUTPUT_FORMAT_CHOICES = ("auto", "txt", "csv", "json")
+
+
+def infer_output_format(output_path: Path, requested_format: str) -> str:
+    if requested_format != "auto":
+        return requested_format
+    suffix = output_path.suffix.lower()
+    if suffix == ".csv":
+        return "csv"
+    if suffix == ".json":
+        return "json"
+    return "txt"
 
 
 def generate_rows(
@@ -83,7 +99,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-edo",
         type=int,
-        default=4800,
+        default=96,
         help="Largest equal division of the octave to include.",
     )
     parser.add_argument(
@@ -106,7 +122,13 @@ def parse_args() -> argparse.Namespace:
         "--output",
         type=Path,
         default=Path("tempered-intervals.txt"),
-        help="Output text file path.",
+        help="Output path (.txt/.csv/.json or set --output-format).",
+    )
+    parser.add_argument(
+        "--output-format",
+        choices=OUTPUT_FORMAT_CHOICES,
+        default="auto",
+        help="Output format. Use 'auto' to infer from file extension.",
     )
     add_output_control_args(parser)
     return parser.parse_args()
@@ -134,41 +156,132 @@ def write_output(
     include_unison: bool,
     include_octave: bool,
     precision: int,
+    output_format: str,
     reporter: Reporter,
 ) -> int:
     total_rows = count_rows(min_edo, max_edo, include_unison, include_octave)
-    reporter.info(f"Writing {total_rows} equal-tempered rows...")
-    with output_path.open("w", encoding="utf-8") as handle:
-        handle.write("# intervalEncyclopedia - Equal Tempered Intervals\n")
-        handle.write(
-            f"# generated_utc={datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}\n"
-        )
-        handle.write(f"# min_edo={min_edo}\n")
-        handle.write(f"# max_edo={max_edo}\n")
-        handle.write(f"# include_unison={include_unison}\n")
-        handle.write(f"# include_octave={include_octave}\n")
-        handle.write(f"# total_rows={total_rows}\n")
-        handle.write("edo\tstep\tinterval_name\tratio\tprime_factorization\tcents\texpression\n")
+    resolved_format = infer_output_format(output_path=output_path, requested_format=output_format)
+    reporter.info(f"Writing {total_rows} equal-tempered rows ({resolved_format})...")
 
-        progress = reporter.progress(total=total_rows, label="Tempered rows")
-        written = 0
-        for edo, step, ratio, cents in generate_rows(
-            min_edo=min_edo,
-            max_edo=max_edo,
-            include_unison=include_unison,
-            include_octave=include_octave,
-        ):
-            expression = f"2^({step}/{edo})"
-            interval_name = edo_interval_name(step=step, edo=edo)
-            prime_factorization = prime_factorization_for_tempered_step(step=step, edo=edo)
-            handle.write(
-                f"{edo}\t{step}\t{interval_name}\t{ratio:.{precision}f}\t"
-                f"{prime_factorization}\t{cents:.{precision}f}\t{expression}\n"
-            )
-            written += 1
-            progress.update(written)
+    metadata = {
+        "title": "intervalEncyclopedia - Equal Tempered Intervals",
+        "generated_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "min_edo": min_edo,
+        "max_edo": max_edo,
+        "include_unison": include_unison,
+        "include_octave": include_octave,
+        "total_rows": total_rows,
+        "output_format": resolved_format,
+    }
+    columns = [
+        "edo",
+        "step",
+        "interval_name",
+        "ratio",
+        "prime_factorization",
+        "cents",
+        "expression",
+    ]
+    progress = reporter.progress(total=total_rows, label="Tempered rows")
 
-        progress.finish()
+    with output_path.open("w", encoding="utf-8", newline="") as handle:
+        if resolved_format == "txt":
+            handle.write(f"# {metadata['title']}\n")
+            handle.write(f"# generated_utc={metadata['generated_utc']}\n")
+            handle.write(f"# min_edo={metadata['min_edo']}\n")
+            handle.write(f"# max_edo={metadata['max_edo']}\n")
+            handle.write(f"# include_unison={metadata['include_unison']}\n")
+            handle.write(f"# include_octave={metadata['include_octave']}\n")
+            handle.write(f"# total_rows={metadata['total_rows']}\n")
+            handle.write(f"# output_format={metadata['output_format']}\n")
+            handle.write("\t".join(columns) + "\n")
+
+            for written, (edo, step, ratio, cents) in enumerate(
+                generate_rows(
+                    min_edo=min_edo,
+                    max_edo=max_edo,
+                    include_unison=include_unison,
+                    include_octave=include_octave,
+                ),
+                start=1,
+            ):
+                expression = f"2^({step}/{edo})"
+                interval_name = edo_interval_name(step=step, edo=edo)
+                prime_factorization = prime_factorization_for_tempered_step(step=step, edo=edo)
+                handle.write(
+                    f"{edo}\t{step}\t{interval_name}\t{ratio:.{precision}f}\t"
+                    f"{prime_factorization}\t{cents:.{precision}f}\t{expression}\n"
+                )
+                progress.update(written)
+        elif resolved_format == "csv":
+            writer = csv.DictWriter(handle, fieldnames=columns)
+            writer.writeheader()
+
+            for written, (edo, step, ratio, cents) in enumerate(
+                generate_rows(
+                    min_edo=min_edo,
+                    max_edo=max_edo,
+                    include_unison=include_unison,
+                    include_octave=include_octave,
+                ),
+                start=1,
+            ):
+                expression = f"2^({step}/{edo})"
+                interval_name = edo_interval_name(step=step, edo=edo)
+                prime_factorization = prime_factorization_for_tempered_step(step=step, edo=edo)
+                writer.writerow(
+                    {
+                        "edo": str(edo),
+                        "step": str(step),
+                        "interval_name": interval_name,
+                        "ratio": f"{ratio:.{precision}f}",
+                        "prime_factorization": prime_factorization,
+                        "cents": f"{cents:.{precision}f}",
+                        "expression": expression,
+                    }
+                )
+                progress.update(written)
+        elif resolved_format == "json":
+            handle.write("{\n")
+            handle.write(f'  "metadata": {json.dumps(metadata, ensure_ascii=False)},\n')
+            handle.write(f'  "columns": {json.dumps(columns, ensure_ascii=False)},\n')
+            handle.write('  "rows": [\n')
+            first = True
+            for written, (edo, step, ratio, cents) in enumerate(
+                generate_rows(
+                    min_edo=min_edo,
+                    max_edo=max_edo,
+                    include_unison=include_unison,
+                    include_octave=include_octave,
+                ),
+                start=1,
+            ):
+                expression = f"2^({step}/{edo})"
+                interval_name = edo_interval_name(step=step, edo=edo)
+                prime_factorization = prime_factorization_for_tempered_step(step=step, edo=edo)
+                row = {
+                    "edo": str(edo),
+                    "step": str(step),
+                    "interval_name": interval_name,
+                    "ratio": f"{ratio:.{precision}f}",
+                    "prime_factorization": prime_factorization,
+                    "cents": f"{cents:.{precision}f}",
+                    "expression": expression,
+                }
+                if first:
+                    handle.write(f"    {json.dumps(row, ensure_ascii=False)}")
+                    first = False
+                else:
+                    handle.write(f",\n    {json.dumps(row, ensure_ascii=False)}")
+                progress.update(written)
+            if not first:
+                handle.write("\n")
+            handle.write("  ]\n")
+            handle.write("}\n")
+        else:
+            raise ValueError(f"Unsupported output format: {resolved_format}")
+
+    progress.finish()
 
     return total_rows
 
@@ -187,6 +300,7 @@ def main() -> None:
         include_unison=include_unison,
         include_octave=include_octave,
         precision=args.precision,
+        output_format=args.output_format,
         reporter=reporter,
     )
     reporter.print_result(f"Wrote {total} rows to {args.output}")

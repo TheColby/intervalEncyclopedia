@@ -89,10 +89,10 @@ $$
 r_{N,k} = 2^{k/N}, \quad c_{N,k} = 1200\frac{k}{N}.
 $$
 
-With defaults (`--min-edo 1 --max-edo 4800`, including unison and octave), row count is:
+With defaults (`--min-edo 1 --max-edo 96`, including unison and octave), row count is:
 
 $$
-\sum_{N=1}^{4800}(N+1) = \frac{4800(4800+3)}{2} = 11{,}527{,}200.
+\sum_{N=1}^{96}(N+1) = \frac{96(96+3)}{2} = 4{,}752.
 $$
 
 ### Historical/Esoteric Families
@@ -121,6 +121,7 @@ $$
 - `/Users/cleider/dev/intervalEncoclopedia/generate-tempered-intervals.py`
 - `/Users/cleider/dev/intervalEncoclopedia/generate-historical-intervals.py`
 - `/Users/cleider/dev/intervalEncoclopedia/generate-master-encyclopedia.py`
+- `/Users/cleider/dev/intervalEncoclopedia/generate-musical-intervals-csv.py`
 - `/Users/cleider/dev/intervalEncoclopedia/cli_output.py`
 - `/Users/cleider/dev/intervalEncoclopedia/sources/`
 
@@ -140,8 +141,6 @@ Generate all default volumes and assemble master output:
 ```bash
 python3 /Users/cleider/dev/intervalEncoclopedia/generate-master-encyclopedia.py \
   --regenerate-all \
-  --max-harmonic 16384 \
-  --max-edo 4800 \
   --output /Users/cleider/dev/intervalEncoclopedia/interval-encyclopedia-master.txt
 ```
 
@@ -156,13 +155,34 @@ All generator scripts share:
 - `--no-progress`
 - `--progress-width N`
 
+## CSV and JSON I/O Support
+
+All generator scripts now support explicit output-format selection plus extension-based auto detection.
+
+- Use `--output-format auto` to infer from `--output` file extension.
+- For the volume generators and master script, `.txt`, `.csv`, and `.json` are supported output extensions.
+- For the musical table exporter, `.csv` and `.json` are supported output extensions.
+
+I/O matrix:
+
+- `generate-just-intervals.py`:
+  outputs: `txt`, `csv`, `json`; inputs: parameter-driven generation.
+- `generate-tempered-intervals.py`:
+  outputs: `txt`, `csv`, `json`; inputs: parameter-driven generation.
+- `generate-historical-intervals.py`:
+  outputs: `txt`, `csv`, `json`; imported source inputs: `.tsv`, `.csv`, `.json`; extra interval input: `--extra-source` (`.tsv`, `.csv`, `.json`) plus legacy alias `--extra-json`.
+- `generate-master-encyclopedia.py`:
+  outputs: `txt`, `csv`, `json`; source volume inputs: `.txt`, `.csv`, `.json`.
+- `generate-musical-intervals-csv.py`:
+  outputs: `csv`, `json`; inputs: HTML table from `--url`.
+
 ## Volume I: Just Intervals
 
 Run:
 
 ```bash
 python3 /Users/cleider/dev/intervalEncoclopedia/generate-just-intervals.py \
-  --max-harmonic 16384 \
+  --max-harmonic 320 \
   --output /Users/cleider/dev/intervalEncoclopedia/just-intervals.txt
 ```
 
@@ -173,6 +193,7 @@ Main options:
 - `--max-rows N`
 - `--precision N`
 - `--output path`
+- `--output-format auto|txt|csv|json`
 
 Output columns:
 
@@ -196,7 +217,7 @@ Run:
 ```bash
 python3 /Users/cleider/dev/intervalEncoclopedia/generate-tempered-intervals.py \
   --min-edo 1 \
-  --max-edo 4800 \
+  --max-edo 96 \
   --output /Users/cleider/dev/intervalEncoclopedia/tempered-intervals.txt
 ```
 
@@ -208,6 +229,7 @@ Main options:
 - `--exclude-octave`
 - `--precision N`
 - `--output path`
+- `--output-format auto|txt|csv|json`
 
 Output columns:
 
@@ -238,13 +260,16 @@ Main options:
 
 - `--sort-by value|name|slug`
 - `--precision N`
-- `--extra-json path.json`
-- `--scribd-source path.tsv`, `--exclude-scribd`
-- `--miraheze-source path.tsv`, `--exclude-miraheze`
-- `--huygens-fokker-source path.tsv`, `--exclude-huygens-fokker`
+- `--output-format auto|txt|csv|json`
+- `--extra-source path.{tsv,csv,json}` (legacy alias: `--extra-json path.json`)
+- `--scribd-source path.{tsv,csv,json}`, `--exclude-scribd`
+- `--miraheze-source path.{tsv,csv,json}`, `--exclude-miraheze`
+- `--huygens-fokker-source path.{tsv,csv,json}`, `--exclude-huygens-fokker`
 - `--min-octave-edo N`, `--max-octave-edo N`
 - `--min-tritave-edt N`, `--max-tritave-edt N`
 - `--min-consonance-divisions N`, `--max-consonance-divisions N`
+
+Default generated-family maxima are `64` (octave EDO), `32` (tritave EDT), and `32` (consonance families).
 
 Default source imports:
 
@@ -270,8 +295,6 @@ Run:
 ```bash
 python3 /Users/cleider/dev/intervalEncoclopedia/generate-master-encyclopedia.py \
   --regenerate-all \
-  --max-harmonic 16384 \
-  --max-edo 4800 \
   --output /Users/cleider/dev/intervalEncoclopedia/interval-encyclopedia-master.txt
 ```
 
@@ -279,19 +302,47 @@ Behavior:
 
 - regenerates all sources with `--regenerate-all`,
 - can fail fast on missing sources with `--skip-generation`,
-- writes volume markers:
-  - `%%<VOLUME:JUST:BEGIN>` ... `%%<VOLUME:JUST:END>`
-  - `%%<VOLUME:TEMPERED:BEGIN>` ... `%%<VOLUME:TEMPERED:END>`
-  - `%%<VOLUME:HISTORICAL:BEGIN>` ... `%%<VOLUME:HISTORICAL:END>`
+- supports `--output-format auto|txt|csv|json`,
+- accepts mixed source formats for `--just-input`, `--tempered-input`, and `--historical-input` (`.txt`, `.csv`, `.json`),
+- forwards `--historical-extra-source` to the historical generator (legacy alias: `--historical-extra-json`),
+- writes volume markers only for text master output:
+  `%%<VOLUME:JUST:BEGIN>` ... `%%<VOLUME:JUST:END>`,
+  `%%<VOLUME:TEMPERED:BEGIN>` ... `%%<VOLUME:TEMPERED:END>`,
+  `%%<VOLUME:HISTORICAL:BEGIN>` ... `%%<VOLUME:HISTORICAL:END>`.
+
+## Musical Table Export
+
+Run:
+
+```bash
+python3 /Users/cleider/dev/intervalEncoclopedia/generate-musical-intervals-csv.py \
+  --url https://en.wikipedia.org/wiki/List_of_pitch_intervals \
+  --output /Users/cleider/dev/intervalEncoclopedia/musical-intervals.json \
+  --output-format auto
+```
+
+Main options:
+
+- `--url URL`
+- `--table-caption TEXT`
+- `--output path`
+- `--output-format auto|csv|json`
+- `--timeout-seconds N`
 
 ## Output Size and Growth
 
 For current defaults:
 
-- just rows: $40{,}799{,}669$
-- tempered rows: $11{,}527{,}200$
-- historical rows: $46{,}535$
-- combined rows: $52{,}373{,}404$
+- just rows: $15{,}616$
+- tempered rows: $4{,}752$
+- historical rows: $4{,}516$
+- combined rows: $24{,}884$
+
+At approximately $50$ rows per printed page, the default profile is about:
+
+$$
+\frac{24{,}884}{50} \approx 498\ \text{pages}.
+$$
 
 Empirical growth intuition:
 
@@ -307,15 +358,42 @@ $$
 
 which matches the constrained Stern-Brocot region (ratio band $[1,2)$) times coprimality density.
 
+For full-scale corpus generation, explicitly raise limits in each source volume, then assemble:
+
+```bash
+python3 /Users/cleider/dev/intervalEncoclopedia/generate-just-intervals.py \
+  --max-harmonic 16384 \
+  --output /Users/cleider/dev/intervalEncoclopedia/just-intervals-large.txt
+
+python3 /Users/cleider/dev/intervalEncoclopedia/generate-tempered-intervals.py \
+  --max-edo 4800 \
+  --output /Users/cleider/dev/intervalEncoclopedia/tempered-intervals-large.txt
+
+python3 /Users/cleider/dev/intervalEncoclopedia/generate-historical-intervals.py \
+  --max-octave-edo 200 \
+  --max-tritave-edt 120 \
+  --max-consonance-divisions 120 \
+  --output /Users/cleider/dev/intervalEncoclopedia/historical-intervals-large.txt
+
+python3 /Users/cleider/dev/intervalEncoclopedia/generate-master-encyclopedia.py \
+  --skip-generation \
+  --just-input /Users/cleider/dev/intervalEncoclopedia/just-intervals-large.txt \
+  --tempered-input /Users/cleider/dev/intervalEncoclopedia/tempered-intervals-large.txt \
+  --historical-input /Users/cleider/dev/intervalEncoclopedia/historical-intervals-large.txt \
+  --output /Users/cleider/dev/intervalEncoclopedia/interval-encyclopedia-master-large.txt
+```
+
 ## Data Integrity and Reproducibility
 
-Each output includes header metadata:
+Each text output includes header metadata:
 
 - generation timestamp,
 - effective bounds/flags,
 - total row count.
 
 This allows deterministic regeneration and simple downstream validation.
+
+JSON outputs include a top-level `metadata` object and a `rows` array with schema fields in `columns`.
 
 ## Advanced Notes
 
@@ -346,7 +424,8 @@ python3 -m py_compile \
   /Users/cleider/dev/intervalEncoclopedia/generate-just-intervals.py \
   /Users/cleider/dev/intervalEncoclopedia/generate-tempered-intervals.py \
   /Users/cleider/dev/intervalEncoclopedia/generate-historical-intervals.py \
-  /Users/cleider/dev/intervalEncoclopedia/generate-master-encyclopedia.py
+  /Users/cleider/dev/intervalEncoclopedia/generate-master-encyclopedia.py \
+  /Users/cleider/dev/intervalEncoclopedia/generate-musical-intervals-csv.py
 ```
 
 ## License / Attribution
