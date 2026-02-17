@@ -9,6 +9,7 @@ It describes implementation details, data flow, algorithms, complexity, and func
 - `/Users/cleider/dev/intervalEncoclopedia/generate-tempered-intervals.py`
 - `/Users/cleider/dev/intervalEncoclopedia/generate-historical-intervals.py`
 - `/Users/cleider/dev/intervalEncoclopedia/generate-master-encyclopedia.py`
+- `/Users/cleider/dev/intervalEncoclopedia/generate-musical-intervals-csv.py`
 
 ## 1) Shared Output Layer (`cli_output.py`)
 
@@ -63,6 +64,23 @@ If no explicit `--verbosity` is set:
 - `create_reporter(args)`
 
 All generators call these functions during parse/validation/setup.
+
+### Format inference pattern
+
+Generator scripts that emit files expose `--output-format` and support `auto` inference from extension.
+
+For output path $p$:
+
+$$
+\text{format}(p)=
+\begin{cases}
+\texttt{csv}, & p \text{ ends with } .\texttt{csv} \\
+\texttt{json}, & p \text{ ends with } .\texttt{json} \\
+\texttt{txt}, & \text{otherwise}
+\end{cases}
+$$
+
+The musical table exporter uses the same pattern but defaults to `csv` when extension is not `.json`.
 
 ## 2) Just Intervals (`generate-just-intervals.py`)
 
@@ -131,7 +149,16 @@ This enables near-constant-time factorization step transitions in `integer_facto
 - `count_filtered_rows(...)`
   - pre-count pass used to initialize deterministic progress totals.
 - `write_output(...)`
-  - single streaming write pass with tabular schema.
+  - single streaming write pass with `txt`, `csv`, or `json` serialization.
+
+### Output serializers
+
+- text:
+  metadata header plus tab-delimited rows.
+- CSV:
+  RFC4180-style rows through `csv.DictWriter`.
+- JSON:
+  envelope with `metadata`, `columns`, and `rows`.
 
 ### Complexity
 
@@ -194,10 +221,18 @@ $$
 With defaults and included endpoints:
 
 $$
-\sum_{N=1}^{4800}(N+1)=11{,}527{,}200.
+\sum_{N=1}^{96}(N+1)=4{,}752.
 $$
 
 Runtime is linear in row count; memory usage is streaming/constant aside from minimal buffers.
+
+### Output serializers
+
+`write_output(...)` supports `txt`, `csv`, and `json` with the same row schema:
+
+- text: metadata header and tab-delimited rows,
+- CSV: structured columns via `csv.DictWriter`,
+- JSON: object with `metadata`, `columns`, and `rows`.
 
 ## 4) Historical and Esoteric Intervals (`generate-historical-intervals.py`)
 
@@ -209,9 +244,15 @@ Build a mixed corpus combining:
 - equal-division families (octave, tritave, consonant periods),
 - Carlos scale families,
 - source-imported named rational intervals,
-- optional user JSON additions.
+- optional user additions from `.tsv`, `.csv`, or `.json`.
 
 Final set is bounded to $[1,2]$ and deduplicated by slug.
+
+Default generated-family ranges are intentionally moderate:
+
+- octave EDO max: `64`,
+- tritave EDT max: `32`,
+- consonance-family max: `32`.
 
 ### Key Data Models
 
@@ -268,11 +309,22 @@ If parsing fails (irrational expressions), output is `-`.
 
 ### Source readers
 
-- `read_scribd_interval_tsv(path)`
-- `read_miraheze_interval_tsv(path)`
-- `read_huygens_fokker_interval_tsv(path)`
+- `infer_source_format(path)`
+- `load_ratio_name_records(path)` for `.tsv`, `.csv`, `.json`
+- source-specific wrappers:
+  - `read_scribd_interval_tsv(path)`
+  - `read_miraheze_interval_tsv(path)`
+  - `read_huygens_fokker_interval_tsv(path)`
 
 These readers preserve provenance fields in notes where present.
+
+### Output serializers
+
+`write_output(...)` supports:
+
+- text with metadata header and tab-delimited rows,
+- CSV with explicit column names,
+- JSON with `metadata`, `columns`, and `rows`.
 
 ### Validation gates
 
@@ -298,7 +350,7 @@ Orchestrate source generation and produce one stitched master file containing al
 1. Parse args and validate.
 2. Build child-command lists for three source generators.
 3. Ensure/regen sources (`ensure_source`).
-4. Read volumes and parse `# total_rows=` headers.
+4. Read volumes and parse row totals from `txt`, `csv`, or `json`.
 5. Write combined master with explicit begin/end markers.
 
 ### Marker format
@@ -319,7 +371,42 @@ This enables deterministic extraction/re-splitting.
 
 `run_generator` captures stdout/stderr and raises a detailed `RuntimeError` on non-zero exit, including command and captured streams.
 
-## 6) Data Schemas
+### Input and output formats
+
+- input volumes:
+  `read_volume(...)` auto-detects `.txt`, `.csv`, `.json`.
+- output formats:
+  - `write_master_txt(...)`: marker-based stitched tome,
+  - `write_master_csv(...)`: one row per volume with embedded `content`,
+  - `write_master_json(...)`: top-level metadata and per-volume objects.
+
+`parse_total_rows_text`, `parse_total_rows_csv`, and `parse_total_rows_json` normalize total row extraction across source types.
+
+## 6) Musical Interval Table Export (`generate-musical-intervals-csv.py`)
+
+### Goal
+
+Download the Wikipedia interval table and export it in machine-readable form.
+
+### Parsing pipeline
+
+1. `download_html(...)` fetches source page HTML.
+2. `WikiTableParser` captures all `<table>` elements.
+3. `find_target_table(...)` selects by caption substring.
+4. `expand_rowspan_colspan(...)` normalizes rectangular grid.
+5. `dedupe_headers(...)` stabilizes column names.
+6. `build_records(...)` creates row dictionaries.
+
+### Output serializers
+
+- CSV:
+  `write_csv(...)` with stable headers.
+- JSON:
+  `write_json(...)` with `metadata`, `columns`, and `rows`.
+
+Supported output formats are `csv` and `json` via `--output-format` (`auto` by extension).
+
+## 7) Data Schemas
 
 ### Just table
 
@@ -357,7 +444,34 @@ Columns:
 7. `tradition`
 8. `note`
 
-## 7) Determinism and Reproducibility
+### Master CSV table
+
+Columns:
+
+1. `tag`
+2. `title`
+3. `source_file`
+4. `source_format`
+5. `total_rows`
+6. `content`
+
+### Master JSON object
+
+Top-level keys:
+
+1. `metadata`
+2. `volumes`
+
+Each `volumes[i]` contains:
+
+1. `tag`
+2. `title`
+3. `source_file`
+4. `source_format`
+5. `total_rows`
+6. `content`
+
+## 8) Determinism and Reproducibility
 
 Each generated file includes a metadata header with parameters and total rows. Given identical script versions and arguments, row content is deterministic.
 
@@ -365,11 +479,11 @@ Caveat:
 
 - timestamps (`generated_utc`) are expected to differ run-to-run.
 
-## 8) Practical Extension Points
+## 9) Practical Extension Points
 
 ### Add a new historical source importer
 
-1. Add TSV parser analogous to existing readers.
+1. Add parser support for `.tsv`, `.csv`, and/or `.json` rows.
 2. Add parser arguments (`--new-source`, `--exclude-new-source`).
 3. Integrate into `build_interval_corpus`.
 4. Update validation and README/docs.
@@ -386,7 +500,7 @@ Caveat:
 2. Update header row and write format.
 3. Keep backward compatibility considerations explicit in docs.
 
-## 9) Verification Checklist
+## 10) Verification Checklist
 
 Minimum sanity checks after code changes:
 
@@ -396,13 +510,20 @@ python3 -m py_compile \
   /Users/cleider/dev/intervalEncoclopedia/generate-just-intervals.py \
   /Users/cleider/dev/intervalEncoclopedia/generate-tempered-intervals.py \
   /Users/cleider/dev/intervalEncoclopedia/generate-historical-intervals.py \
-  /Users/cleider/dev/intervalEncoclopedia/generate-master-encyclopedia.py
+  /Users/cleider/dev/intervalEncoclopedia/generate-master-encyclopedia.py \
+  /Users/cleider/dev/intervalEncoclopedia/generate-musical-intervals-csv.py
 
 python3 /Users/cleider/dev/intervalEncoclopedia/generate-master-encyclopedia.py \
   --regenerate-all \
   --max-harmonic 1024 \
   --max-edo 128 \
   --output /tmp/interval-encyclopedia-master-smoke.txt \
+  --no-progress
+
+python3 /Users/cleider/dev/intervalEncoclopedia/generate-master-encyclopedia.py \
+  --regenerate-all \
+  --output /tmp/interval-encyclopedia-master-smoke.json \
+  --output-format json \
   --no-progress
 ```
 

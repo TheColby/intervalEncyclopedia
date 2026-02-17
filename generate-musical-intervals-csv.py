@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import re
 import urllib.request
 from dataclasses import dataclass
@@ -23,6 +24,17 @@ from cli_output import (
     create_reporter,
     validate_output_control_args,
 )
+
+
+OUTPUT_FORMAT_CHOICES = ("auto", "csv", "json")
+
+
+def infer_output_format(output_path: Path, requested_format: str) -> str:
+    if requested_format != "auto":
+        return requested_format
+    if output_path.suffix.lower() == ".json":
+        return "json"
+    return "csv"
 
 
 @dataclass
@@ -275,28 +287,62 @@ def dedupe_headers(raw_headers: List[str]) -> List[str]:
     return output
 
 
-def write_csv(output: Path, headers: List[str], rows: List[List[str]], reporter: Reporter) -> int:
+def build_records(headers: List[str], rows: List[List[str]]) -> List[Dict[str, str]]:
+    records: List[Dict[str, str]] = []
+    for row in rows:
+        if not any(normalize_text(cell) for cell in row):
+            continue
+        padded = row + [""] * (len(headers) - len(row))
+        record = dict(zip(headers, padded))
+        if "Interval name" in record:
+            record["Interval name"] = clean_interval_name(record["Interval name"])
+        records.append(record)
+    return records
+
+
+def write_csv(
+    output: Path,
+    headers: List[str],
+    records: List[Dict[str, str]],
+    reporter: Reporter,
+) -> int:
     reporter.info(f"Writing CSV rows to {output}...")
-    progress = reporter.progress(total=len(rows), label="CSV rows")
+    progress = reporter.progress(total=max(1, len(records)), label="CSV rows")
     with output.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=headers)
         writer.writeheader()
-
-        row_count = 0
-        for index, row in enumerate(rows, start=1):
-            if not any(normalize_text(cell) for cell in row):
-                progress.update(index)
-                continue
-            padded = row + [""] * (len(headers) - len(row))
-            record = dict(zip(headers, padded))
-            if "Interval name" in record:
-                record["Interval name"] = clean_interval_name(record["Interval name"])
+        for index, record in enumerate(records, start=1):
             writer.writerow(record)
-            row_count += 1
             progress.update(index)
 
     progress.finish()
-    return row_count
+    return len(records)
+
+
+def write_json(
+    output: Path,
+    headers: List[str],
+    records: List[Dict[str, str]],
+    source_url: str,
+    table_caption: str,
+    reporter: Reporter,
+) -> int:
+    reporter.info(f"Writing JSON rows to {output}...")
+    payload = {
+        "metadata": {
+            "title": "List of musical intervals table export",
+            "source_url": source_url,
+            "table_caption": table_caption,
+            "output_format": "json",
+            "total_rows": len(records),
+        },
+        "columns": headers,
+        "rows": records,
+    }
+    with output.open("w", encoding="utf-8") as handle:
+        json.dump(payload, handle, ensure_ascii=False, indent=2)
+        handle.write("\n")
+    return len(records)
 
 
 def parse_args() -> argparse.Namespace:
@@ -320,7 +366,13 @@ def parse_args() -> argparse.Namespace:
         "--output",
         type=Path,
         default=Path("musical-intervals.csv"),
-        help="Output CSV path.",
+        help="Output path (.csv/.json or set --output-format).",
+    )
+    parser.add_argument(
+        "--output-format",
+        choices=OUTPUT_FORMAT_CHOICES,
+        default="auto",
+        help="Output format. Use 'auto' to infer from file extension.",
     )
     parser.add_argument(
         "--timeout-seconds",
@@ -367,7 +419,21 @@ def main() -> None:
     headers = dedupe_headers(expanded_rows[header_index])
     data_rows = expanded_rows[header_index + 1 :]
 
-    row_count = write_csv(args.output, headers, data_rows, reporter=reporter)
+    records = build_records(headers, data_rows)
+    output_format = infer_output_format(args.output, args.output_format)
+    if output_format == "csv":
+        row_count = write_csv(args.output, headers, records, reporter=reporter)
+    elif output_format == "json":
+        row_count = write_json(
+            args.output,
+            headers,
+            records,
+            source_url=args.url,
+            table_caption=args.table_caption,
+            reporter=reporter,
+        )
+    else:
+        raise ValueError(f"Unsupported output format: {output_format}")
     reporter.print_result(f"Wrote {row_count} rows to {args.output}")
     if reporter.verbosity >= 2:
         print(f"Columns: {', '.join(headers)}")

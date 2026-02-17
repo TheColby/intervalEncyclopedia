@@ -9,6 +9,8 @@ files) by calling the three generator scripts in this workspace.
 from __future__ import annotations
 
 import argparse
+import csv
+import json
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -24,19 +26,65 @@ from cli_output import (
 )
 
 
+OUTPUT_FORMAT_CHOICES = ("auto", "txt", "csv", "json")
+
+
+def infer_data_format(path: Path, requested_format: str = "auto") -> str:
+    if requested_format != "auto":
+        return requested_format
+    suffix = path.suffix.lower()
+    if suffix == ".csv":
+        return "csv"
+    if suffix == ".json":
+        return "json"
+    return "txt"
+
+
 @dataclass(frozen=True)
 class Volume:
     tag: str
     title: str
     source_path: Path
+    source_format: str
     content: str
     total_rows: str
 
 
-def parse_total_rows(content: str) -> str:
+def parse_total_rows_text(content: str) -> str:
     for line in content.splitlines():
         if line.startswith("# total_rows="):
             return line.split("=", 1)[1].strip()
+    return "unknown"
+
+
+def parse_total_rows_csv(content: str) -> str:
+    rows = list(csv.reader(content.splitlines()))
+    if not rows:
+        return "0"
+    data_rows = 0
+    for row in rows[1:]:
+        if any(cell.strip() for cell in row):
+            data_rows += 1
+    return str(data_rows)
+
+
+def parse_total_rows_json(content: str) -> str:
+    try:
+        payload = json.loads(content)
+    except json.JSONDecodeError:
+        return "unknown"
+
+    if isinstance(payload, dict):
+        metadata = payload.get("metadata")
+        if isinstance(metadata, dict) and "total_rows" in metadata:
+            return str(metadata["total_rows"])
+        rows = payload.get("rows")
+        if isinstance(rows, list):
+            return str(len(rows))
+        return "unknown"
+
+    if isinstance(payload, list):
+        return str(len(payload))
     return "unknown"
 
 
@@ -86,18 +134,29 @@ def ensure_source(
 
 
 def read_volume(tag: str, title: str, source_path: Path) -> Volume:
+    source_format = infer_data_format(source_path)
     text = source_path.read_text(encoding="utf-8").rstrip("\n")
+    if source_format == "txt":
+        total_rows = parse_total_rows_text(text)
+    elif source_format == "csv":
+        total_rows = parse_total_rows_csv(text)
+    elif source_format == "json":
+        total_rows = parse_total_rows_json(text)
+    else:
+        total_rows = "unknown"
+
     return Volume(
         tag=tag,
         title=title,
         source_path=source_path,
+        source_format=source_format,
         content=text,
-        total_rows=parse_total_rows(text),
+        total_rows=total_rows,
     )
 
 
-def write_master(output_path: Path, volumes: List[Volume], reporter: Reporter) -> None:
-    reporter.info(f"Writing master tome with {len(volumes)} volumes...")
+def write_master_txt(output_path: Path, volumes: List[Volume], reporter: Reporter) -> None:
+    reporter.info(f"Writing master tome (txt) with {len(volumes)} volumes...")
     generated_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     progress = reporter.progress(total=max(1, len(volumes) * 2), label="Master assembly")
     completed_steps = 0
@@ -108,10 +167,11 @@ def write_master(output_path: Path, volumes: List[Volume], reporter: Reporter) -
         handle.write("# format=tabular-source-plus-volume-markers\n")
         handle.write("#\n")
         handle.write("# volume_index\n")
-        handle.write("tag\ttitle\tsource_file\ttotal_rows\n")
+        handle.write("tag\ttitle\tsource_file\tsource_format\ttotal_rows\n")
         for volume in volumes:
             handle.write(
-                f"{volume.tag}\t{volume.title}\t{volume.source_path}\t{volume.total_rows}\n"
+                f"{volume.tag}\t{volume.title}\t{volume.source_path}\t"
+                f"{volume.source_format}\t{volume.total_rows}\n"
             )
             completed_steps += 1
             progress.update(completed_steps)
@@ -121,6 +181,7 @@ def write_master(output_path: Path, volumes: List[Volume], reporter: Reporter) -
             handle.write(f"\n%%<VOLUME:{volume.tag}:BEGIN>\n")
             handle.write(f"# volume_title={volume.title}\n")
             handle.write(f"# source_file={volume.source_path}\n")
+            handle.write(f"# source_format={volume.source_format}\n")
             handle.write(f"# total_rows={volume.total_rows}\n")
             handle.write(volume.content)
             handle.write("\n%%<VOLUME:{0}:END>\n".format(volume.tag))
@@ -128,6 +189,74 @@ def write_master(output_path: Path, volumes: List[Volume], reporter: Reporter) -
             progress.update(completed_steps)
 
     progress.finish()
+
+
+def write_master_csv(output_path: Path, volumes: List[Volume], reporter: Reporter) -> None:
+    reporter.info(f"Writing master table (csv) with {len(volumes)} volume rows...")
+    columns = ["tag", "title", "source_file", "source_format", "total_rows", "content"]
+    progress = reporter.progress(total=max(1, len(volumes)), label="Master CSV rows")
+    with output_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=columns)
+        writer.writeheader()
+        for index, volume in enumerate(volumes, start=1):
+            writer.writerow(
+                {
+                    "tag": volume.tag,
+                    "title": volume.title,
+                    "source_file": str(volume.source_path),
+                    "source_format": volume.source_format,
+                    "total_rows": volume.total_rows,
+                    "content": volume.content,
+                }
+            )
+            progress.update(index)
+    progress.finish()
+
+
+def write_master_json(output_path: Path, volumes: List[Volume], reporter: Reporter) -> None:
+    reporter.info(f"Writing master object (json) with {len(volumes)} volumes...")
+    generated_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    payload = {
+        "metadata": {
+            "title": "intervalEncyclopedia - Master Tome",
+            "generated_utc": generated_utc,
+            "volumes": len(volumes),
+            "output_format": "json",
+        },
+        "volumes": [
+            {
+                "tag": volume.tag,
+                "title": volume.title,
+                "source_file": str(volume.source_path),
+                "source_format": volume.source_format,
+                "total_rows": volume.total_rows,
+                "content": volume.content,
+            }
+            for volume in volumes
+        ],
+    }
+    with output_path.open("w", encoding="utf-8") as handle:
+        json.dump(payload, handle, ensure_ascii=False, indent=2)
+        handle.write("\n")
+
+
+def write_master(
+    output_path: Path,
+    volumes: List[Volume],
+    output_format: str,
+    reporter: Reporter,
+) -> None:
+    resolved_format = infer_data_format(output_path, requested_format=output_format)
+    if resolved_format == "txt":
+        write_master_txt(output_path=output_path, volumes=volumes, reporter=reporter)
+        return
+    if resolved_format == "csv":
+        write_master_csv(output_path=output_path, volumes=volumes, reporter=reporter)
+        return
+    if resolved_format == "json":
+        write_master_json(output_path=output_path, volumes=volumes, reporter=reporter)
+        return
+    raise ValueError(f"Unsupported output format: {resolved_format}")
 
 
 def parse_args() -> argparse.Namespace:
@@ -138,7 +267,13 @@ def parse_args() -> argparse.Namespace:
         "--output",
         type=Path,
         default=Path("interval-encyclopedia-master.txt"),
-        help="Master output file path.",
+        help="Master output path (.txt/.csv/.json or set --output-format).",
+    )
+    parser.add_argument(
+        "--output-format",
+        choices=OUTPUT_FORMAT_CHOICES,
+        default="auto",
+        help="Master output format. Use 'auto' to infer from output file extension.",
     )
 
     parser.add_argument(
@@ -176,7 +311,7 @@ def parse_args() -> argparse.Namespace:
         "--harmonic-limit",
         dest="harmonic_limit",
         type=int,
-        default=16384,
+        default=320,
         help="Passed to generate-just-intervals.py when generating sources.",
     )
     parser.add_argument(
@@ -188,14 +323,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-edo",
         type=int,
-        default=4800,
+        default=96,
         help="Passed to generate-tempered-intervals.py when generating sources.",
     )
     parser.add_argument(
         "--historical-extra-json",
         type=Path,
         default=None,
-        help="Optional JSON passed to generate-historical-intervals.py.",
+        help="Optional extra source passed to historical generator (legacy alias).",
+    )
+    parser.add_argument(
+        "--historical-extra-source",
+        type=Path,
+        default=None,
+        help="Optional extra source passed to generate-historical-intervals.py.",
     )
     parser.add_argument(
         "--python",
@@ -215,6 +356,11 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError("--max-prime must be >= 2 when provided.")
     if args.max_edo < 1:
         raise ValueError("--max-edo must be >= 1.")
+    if args.historical_extra_json is not None and args.historical_extra_source is not None:
+        raise ValueError("Use only one of --historical-extra-json or --historical-extra-source.")
+    extra_source = args.historical_extra_source or args.historical_extra_json
+    if extra_source is not None and not extra_source.exists():
+        raise FileNotFoundError(f"Historical extra source file not found: {extra_source}.")
     validate_output_control_args(args)
 
 
@@ -248,6 +394,9 @@ def main() -> None:
     tempered_script = root / "generate-tempered-intervals.py"
     historical_script = root / "generate-historical-intervals.py"
     forwarded_output_switches = build_forwarded_output_switches(args)
+    just_output_format = infer_data_format(args.just_input)
+    tempered_output_format = infer_data_format(args.tempered_input)
+    historical_output_format = infer_data_format(args.historical_input)
 
     just_command = [
         str(args.python),
@@ -256,6 +405,8 @@ def main() -> None:
         str(args.harmonic_limit),
         "--output",
         str(args.just_input),
+        "--output-format",
+        just_output_format,
         *forwarded_output_switches,
     ]
     if args.max_prime is not None:
@@ -268,6 +419,8 @@ def main() -> None:
         str(args.max_edo),
         "--output",
         str(args.tempered_input),
+        "--output-format",
+        tempered_output_format,
         *forwarded_output_switches,
     ]
 
@@ -276,10 +429,13 @@ def main() -> None:
         str(historical_script),
         "--output",
         str(args.historical_input),
+        "--output-format",
+        historical_output_format,
         *forwarded_output_switches,
     ]
-    if args.historical_extra_json is not None:
-        historical_command.extend(["--extra-json", str(args.historical_extra_json)])
+    historical_extra_source = args.historical_extra_source or args.historical_extra_json
+    if historical_extra_source is not None:
+        historical_command.extend(["--extra-source", str(historical_extra_source)])
 
     source_progress = reporter.progress(total=3, label="Source prep")
     ensure_source(
@@ -320,7 +476,7 @@ def main() -> None:
             args.historical_input,
         ),
     ]
-    write_master(args.output, volumes, reporter=reporter)
+    write_master(args.output, volumes, output_format=args.output_format, reporter=reporter)
 
     reporter.print_result(f"Wrote master tome to {args.output}")
 
