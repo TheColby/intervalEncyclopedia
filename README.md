@@ -1,6 +1,6 @@
 # intervalEncyclopedia
 
-`intervalEncyclopedia` is a generator-based reference project for building **intervalEncyclopedia**:
+`intervalEncyclopedia` is a generator-based reference project for building and typesetting **The Interval Encyclopedia**:
 
 - Just intervals (octave-reduced) from bounded integer terms.
 - Equal-tempered intervals up to high EDO values.
