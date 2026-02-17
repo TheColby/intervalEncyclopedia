@@ -302,8 +302,10 @@ def iter_formatted_rows(
             lpf_table=lpf_table,
         )
         cents = cents_from_ratio(numerator, denominator)
+        ratio_decimal = numerator / denominator
         yield {
             "ratio": f"{numerator}/{denominator}",
+            "ratio_decimal": f"{ratio_decimal:.{precision}f}",
             "prime_factorization": prime_factorization,
             "cents": f"{cents:.{precision}f}",
             "largest_prime": str(interval_prime),
@@ -343,6 +345,7 @@ def write_output(
     )
     columns = [
         "ratio",
+        "ratio_decimal",
         "prime_factorization",
         "cents",
         "largest_prime",

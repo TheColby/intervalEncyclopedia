@@ -7,6 +7,7 @@ The default corpus intentionally scales into tens of thousands of rows by combin
 - Tritave equal divisions (EDT/ED3), including Bohlen-Pierce landmarks.
 - Equal divisions of consonant intervals (3/2, 5/4, 7/6).
 - Wendy Carlos alpha/beta/gamma non-octave families.
+- Imported ratio/name corpora from Scribd, Miraheze, Huygens-Fokker, and Xenharmonic Wiki.
 - Geometric and mathematical constants used in speculative tuning practice.
 """
 
@@ -62,6 +63,10 @@ class HistoricalInterval:
     value: float
     tradition: str
     note: str
+    subgroup_monzo: str = ""
+    fjs_name: str = ""
+    comma_size: str = ""
+    xen_url: str = ""
 
 
 @dataclass(frozen=True)
@@ -325,6 +330,10 @@ def read_extra_intervals(path: Path) -> List[HistoricalInterval]:
                     value=float(item["value"]),
                     tradition=str(item.get("tradition", "user-supplied")).strip(),
                     note=str(item.get("note", "")).strip(),
+                    subgroup_monzo=str(item.get("subgroup_monzo", "")).strip(),
+                    fjs_name=str(item.get("fjs_name", "")).strip(),
+                    comma_size=str(item.get("comma_size", "")).strip(),
+                    xen_url=str(item.get("xen_url", "")).strip(),
                 )
             except KeyError as error:
                 raise ValueError(f"Extra JSON item {index} is missing required key: {error}") from error
@@ -358,6 +367,10 @@ def read_extra_intervals(path: Path) -> List[HistoricalInterval]:
                     value=float(parts[3]),
                     tradition=parts[4] if len(parts) > 4 and parts[4] else "user-supplied",
                     note=parts[5] if len(parts) > 5 else "",
+                    subgroup_monzo=parts[6] if len(parts) > 6 else "",
+                    fjs_name=parts[7] if len(parts) > 7 else "",
+                    comma_size=parts[8] if len(parts) > 8 else "",
+                    xen_url=parts[9] if len(parts) > 9 else "",
                 )
             )
     return records
@@ -425,6 +438,21 @@ def format_ratio_prime_factorization(numerator: int, denominator: int) -> str:
     return f"{numerator_text} / {denominator_text}"
 
 
+def fraction_to_subgroup_monzo(value: Fraction) -> str:
+    numerator_factors = dict(integer_factorization(value.numerator))
+    denominator_factors = dict(integer_factorization(value.denominator))
+    primes = sorted(set(numerator_factors) | set(denominator_factors))
+    if not primes:
+        return "<0> @ [1]"
+
+    exponents: List[str] = []
+    for prime in primes:
+        exponent = numerator_factors.get(prime, 0) - denominator_factors.get(prime, 0)
+        exponents.append(str(exponent))
+    basis = ",".join(str(prime) for prime in primes)
+    return f"<{' '.join(exponents)}> @ [{basis}]"
+
+
 def parse_rational_expression(text: str) -> Fraction | None:
     fraction_match = re.fullmatch(
         r"\s*(\d+)\s*/\s*(\d+)\s*(?:\(\s*from\s+\d+\s*/\s*\d+\s*\))?\s*",
@@ -473,9 +501,9 @@ def load_ratio_name_records(
     path: Path,
     *,
     source_label: str,
-) -> List[Tuple[str, str, str, str]]:
+) -> List[dict[str, str]]:
     source_format = infer_source_format(path)
-    records: List[Tuple[str, str, str, str]] = []
+    records: List[dict[str, str]] = []
 
     if source_format == "json":
         with path.open("r", encoding="utf-8") as handle:
@@ -501,17 +529,33 @@ def load_ratio_name_records(
                 interval_name = str(item.get("name", "")).strip()
                 source_page = str(item.get("source_page", "")).strip()
                 source_url = str(item.get("source_url", "")).strip()
+                subgroup_monzo = str(item.get("subgroup_monzo", "")).strip()
+                fjs_name = str(item.get("fjs_name", "")).strip()
+                xen_url = str(item.get("xen_url", "")).strip()
             elif isinstance(item, (list, tuple)) and len(item) >= 2:
                 ratio_text = str(item[0]).strip()
                 interval_name = str(item[1]).strip()
                 source_page = str(item[2]).strip() if len(item) > 2 else ""
                 source_url = str(item[3]).strip() if len(item) > 3 else ""
+                subgroup_monzo = str(item[4]).strip() if len(item) > 4 else ""
+                fjs_name = str(item[5]).strip() if len(item) > 5 else ""
+                xen_url = str(item[6]).strip() if len(item) > 6 else ""
             else:
                 raise ValueError(f"{source_label} JSON item {index} has unsupported shape.")
 
             if not ratio_text:
                 raise ValueError(f"{source_label} JSON item {index} is missing ratio.")
-            records.append((ratio_text, interval_name, source_page, source_url))
+            records.append(
+                {
+                    "ratio": ratio_text,
+                    "name": interval_name,
+                    "source_page": source_page,
+                    "source_url": source_url,
+                    "subgroup_monzo": subgroup_monzo,
+                    "fjs_name": fjs_name,
+                    "xen_url": xen_url,
+                }
+            )
         return records
 
     delimiter = "," if source_format == "csv" else "\t"
@@ -536,23 +580,41 @@ def load_ratio_name_records(
             interval_name = parts[1]
             source_page = parts[2] if len(parts) > 2 else ""
             source_url = parts[3] if len(parts) > 3 else ""
-            records.append((ratio_text, interval_name, source_page, source_url))
+            subgroup_monzo = parts[4] if len(parts) > 4 else ""
+            fjs_name = parts[5] if len(parts) > 5 else ""
+            xen_url = parts[6] if len(parts) > 6 else ""
+            records.append(
+                {
+                    "ratio": ratio_text,
+                    "name": interval_name,
+                    "source_page": source_page,
+                    "source_url": source_url,
+                    "subgroup_monzo": subgroup_monzo,
+                    "fjs_name": fjs_name,
+                    "xen_url": xen_url,
+                }
+            )
     return records
 
 
 def build_ratio_import_rows(
     *,
-    records: List[Tuple[str, str, str, str]],
+    records: List[dict[str, str]],
     slug_prefix: str,
     tradition: str,
     note_without_reduction: str,
     note_with_reduction: str,
+    include_xen_metadata: bool = False,
 ) -> List[HistoricalInterval]:
     rows: List[HistoricalInterval] = []
-    for row_count, (ratio_text, raw_interval_name, source_page, source_url) in enumerate(
-        records,
-        start=1,
-    ):
+    for row_count, record in enumerate(records, start=1):
+        ratio_text = record.get("ratio", "").strip()
+        raw_interval_name = record.get("name", "").strip()
+        source_page = record.get("source_page", "").strip()
+        source_url = record.get("source_url", "").strip()
+        subgroup_monzo = record.get("subgroup_monzo", "").strip()
+        fjs_name = record.get("fjs_name", "").strip()
+        xen_url = record.get("xen_url", "").strip()
         interval_name = raw_interval_name or "(unnamed interval)"
         ratio_fraction = parse_ratio_fraction(ratio_text)
         reduced_fraction = octave_reduce_fraction(ratio_fraction)
@@ -566,6 +628,19 @@ def build_ratio_import_rows(
             reduction_note = note_with_reduction
 
         provenance = format_source_provenance(source_page=source_page, source_url=source_url)
+        row_subgroup_monzo = ""
+        row_fjs_name = ""
+        row_xen_url = ""
+        row_comma_size = ""
+        if include_xen_metadata:
+            row_subgroup_monzo = subgroup_monzo
+            if not row_subgroup_monzo:
+                row_subgroup_monzo = fraction_to_subgroup_monzo(reduced_fraction)
+            row_fjs_name = fjs_name or interval_name
+            row_xen_url = xen_url or source_url
+            if "comma" in interval_name.casefold():
+                row_comma_size = f"{cents_from_ratio(float(reduced_fraction)):.24f}"
+
         rows.append(
             HistoricalInterval(
                 slug=f"{slug_prefix}_{row_count:04d}",
@@ -574,6 +649,10 @@ def build_ratio_import_rows(
                 value=float(reduced_fraction),
                 tradition=tradition,
                 note=f"{reduction_note}{provenance}",
+                subgroup_monzo=row_subgroup_monzo,
+                fjs_name=row_fjs_name,
+                comma_size=row_comma_size,
+                xen_url=row_xen_url,
             )
         )
 
@@ -618,6 +697,21 @@ def read_huygens_fokker_interval_tsv(path: Path) -> List[HistoricalInterval]:
             "Imported from Huygens-Fokker Bohlen-Pierce interval tables and octave-reduced "
             "to project range."
         ),
+    )
+
+
+def read_xenharmonic_wiki_interval_tsv(path: Path) -> List[HistoricalInterval]:
+    return build_ratio_import_rows(
+        records=load_ratio_name_records(path, source_label="Xenharmonic Wiki source"),
+        slug_prefix="xen_wiki",
+        tradition="Xenharmonic Wiki (en.xen.wiki) interval pages",
+        note_without_reduction=(
+            "Imported from Xenharmonic Wiki interval pages without octave reduction."
+        ),
+        note_with_reduction=(
+            "Imported from Xenharmonic Wiki interval pages and octave-reduced to project range."
+        ),
+        include_xen_metadata=True,
     )
 
 
@@ -812,6 +906,9 @@ def build_interval_corpus(args: argparse.Namespace, reporter: Reporter) -> List[
             f"Importing Huygens-Fokker intervals from {args.huygens_fokker_source}..."
         )
         rows.extend(read_huygens_fokker_interval_tsv(args.huygens_fokker_source))
+    if not args.exclude_xen_wiki:
+        reporter.verbose(f"Importing Xenharmonic Wiki intervals from {args.xen_wiki_source}...")
+        rows.extend(read_xenharmonic_wiki_interval_tsv(args.xen_wiki_source))
 
     effective_extra_source = args.extra_source or args.extra_json
     if effective_extra_source is not None:
@@ -863,7 +960,7 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help=(
             "Optional extra interval source in JSON/CSV/TSV with columns "
-            "slug,name,expression,value[,tradition,note]."
+            "slug,name,expression,value[,tradition,note,subgroup_monzo,fjs_name,comma_size,xen_url]."
         ),
     )
     parser.add_argument(
@@ -904,6 +1001,19 @@ def parse_args() -> argparse.Namespace:
         "--exclude-huygens-fokker",
         action="store_true",
         help="Skip built-in Huygens-Fokker Bohlen-Pierce interval import.",
+    )
+    parser.add_argument(
+        "--xen-wiki-source",
+        type=Path,
+        default=(
+            Path(__file__).resolve().parent / "sources" / "xenharmonic-wiki-missing-intervals.tsv"
+        ),
+        help="Source for imported Xenharmonic Wiki rows (.tsv/.csv/.json).",
+    )
+    parser.add_argument(
+        "--exclude-xen-wiki",
+        action="store_true",
+        help="Skip built-in Xenharmonic Wiki interval import.",
     )
     parser.add_argument(
         "--min-octave-edo",
@@ -975,6 +1085,11 @@ def validate_args(args: argparse.Namespace) -> None:
             f"Huygens-Fokker source file not found: {args.huygens_fokker_source}. "
             "Use --exclude-huygens-fokker to skip import."
         )
+    if not args.exclude_xen_wiki and not args.xen_wiki_source.exists():
+        raise FileNotFoundError(
+            f"Xenharmonic Wiki source file not found: {args.xen_wiki_source}. "
+            "Use --exclude-xen-wiki to skip import."
+        )
     validate_range(args.min_octave_edo, args.max_octave_edo, "octave EDO range")
     validate_range(args.min_tritave_edt, args.max_tritave_edt, "tritave EDT range")
     validate_range(
@@ -1021,6 +1136,10 @@ def write_output(
         "prime_factorization",
         "cents",
         "expression",
+        "subgroup_monzo",
+        "fjs_name",
+        "comma_size",
+        "xen_url",
         "tradition",
         "note",
     ]
@@ -1038,6 +1157,13 @@ def write_output(
             for written, interval in enumerate(rows, start=1):
                 prime_factorization = interval_prime_factorization(interval)
                 cents = cents_from_ratio(interval.value)
+                subgroup_monzo = interval.subgroup_monzo
+                ratio = parse_rational_expression(interval.expression)
+                if not subgroup_monzo and ratio is not None:
+                    subgroup_monzo = fraction_to_subgroup_monzo(ratio)
+                comma_size = interval.comma_size
+                if not comma_size and "comma" in interval.name.casefold():
+                    comma_size = f"{cents:.{precision}f}"
                 handle.write(
                     f"{clean_field(interval.slug)}\t"
                     f"{clean_field(interval.name)}\t"
@@ -1045,6 +1171,10 @@ def write_output(
                     f"{clean_field(prime_factorization)}\t"
                     f"{cents:.{precision}f}\t"
                     f"{clean_field(interval.expression)}\t"
+                    f"{clean_field(subgroup_monzo)}\t"
+                    f"{clean_field(interval.fjs_name)}\t"
+                    f"{clean_field(comma_size)}\t"
+                    f"{clean_field(interval.xen_url)}\t"
                     f"{clean_field(interval.tradition)}\t"
                     f"{clean_field(interval.note)}\n"
                 )
@@ -1055,6 +1185,13 @@ def write_output(
             for written, interval in enumerate(rows, start=1):
                 prime_factorization = interval_prime_factorization(interval)
                 cents = cents_from_ratio(interval.value)
+                subgroup_monzo = interval.subgroup_monzo
+                ratio = parse_rational_expression(interval.expression)
+                if not subgroup_monzo and ratio is not None:
+                    subgroup_monzo = fraction_to_subgroup_monzo(ratio)
+                comma_size = interval.comma_size
+                if not comma_size and "comma" in interval.name.casefold():
+                    comma_size = f"{cents:.{precision}f}"
                 writer.writerow(
                     {
                         "slug": clean_field(interval.slug),
@@ -1063,6 +1200,10 @@ def write_output(
                         "prime_factorization": clean_field(prime_factorization),
                         "cents": f"{cents:.{precision}f}",
                         "expression": clean_field(interval.expression),
+                        "subgroup_monzo": clean_field(subgroup_monzo),
+                        "fjs_name": clean_field(interval.fjs_name),
+                        "comma_size": clean_field(comma_size),
+                        "xen_url": clean_field(interval.xen_url),
                         "tradition": clean_field(interval.tradition),
                         "note": clean_field(interval.note),
                     }
@@ -1077,6 +1218,13 @@ def write_output(
             for written, interval in enumerate(rows, start=1):
                 prime_factorization = interval_prime_factorization(interval)
                 cents = cents_from_ratio(interval.value)
+                subgroup_monzo = interval.subgroup_monzo
+                ratio = parse_rational_expression(interval.expression)
+                if not subgroup_monzo and ratio is not None:
+                    subgroup_monzo = fraction_to_subgroup_monzo(ratio)
+                comma_size = interval.comma_size
+                if not comma_size and "comma" in interval.name.casefold():
+                    comma_size = f"{cents:.{precision}f}"
                 row = {
                     "slug": clean_field(interval.slug),
                     "name": clean_field(interval.name),
@@ -1084,6 +1232,10 @@ def write_output(
                     "prime_factorization": clean_field(prime_factorization),
                     "cents": f"{cents:.{precision}f}",
                     "expression": clean_field(interval.expression),
+                    "subgroup_monzo": clean_field(subgroup_monzo),
+                    "fjs_name": clean_field(interval.fjs_name),
+                    "comma_size": clean_field(comma_size),
+                    "xen_url": clean_field(interval.xen_url),
                     "tradition": clean_field(interval.tradition),
                     "note": clean_field(interval.note),
                 }

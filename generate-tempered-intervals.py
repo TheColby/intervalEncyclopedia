@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import argparse
 import csv
+import heapq
 import json
 import math
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterator, Tuple
+from typing import Iterator, List, Tuple
 
 from cli_output import (
     Reporter,
@@ -24,6 +25,7 @@ from cli_output import (
 
 
 OUTPUT_FORMAT_CHOICES = ("auto", "txt", "csv", "json")
+SORT_CHOICES = ("ratio", "edo-step")
 
 
 def infer_output_format(output_path: Path, requested_format: str) -> str:
@@ -47,6 +49,54 @@ def generate_rows(
             ratio = 2.0 ** (step / edo)
             cents = 1200.0 * step / edo
             yield edo, step, ratio, cents
+
+
+def generate_rows_sorted_by_ratio(
+    min_edo: int, max_edo: int, include_unison: bool, include_octave: bool
+) -> Iterator[Tuple[int, int, float, float]]:
+    # Each EDO contributes a monotonic ratio sequence, so a k-way merge yields
+    # globally sorted rows without materializing the full dataset.
+    heap: List[Tuple[float, float, int, int, int]] = []
+    for edo in range(min_edo, max_edo + 1):
+        start_step = 0 if include_unison else 1
+        end_step = edo if include_octave else edo - 1
+        if end_step < start_step:
+            continue
+        step = start_step
+        ratio = 2.0 ** (step / edo)
+        cents = 1200.0 * step / edo
+        heapq.heappush(heap, (ratio, cents, edo, step, end_step))
+
+    while heap:
+        ratio, cents, edo, step, end_step = heapq.heappop(heap)
+        yield edo, step, ratio, cents
+        next_step = step + 1
+        if next_step <= end_step:
+            next_ratio = 2.0 ** (next_step / edo)
+            next_cents = 1200.0 * next_step / edo
+            heapq.heappush(heap, (next_ratio, next_cents, edo, next_step, end_step))
+
+
+def select_row_generator(
+    sort_by: str,
+    min_edo: int,
+    max_edo: int,
+    include_unison: bool,
+    include_octave: bool,
+) -> Iterator[Tuple[int, int, float, float]]:
+    if sort_by == "ratio":
+        return generate_rows_sorted_by_ratio(
+            min_edo=min_edo,
+            max_edo=max_edo,
+            include_unison=include_unison,
+            include_octave=include_octave,
+        )
+    return generate_rows(
+        min_edo=min_edo,
+        max_edo=max_edo,
+        include_unison=include_unison,
+        include_octave=include_octave,
+    )
 
 
 def count_rows(
@@ -119,6 +169,12 @@ def parse_args() -> argparse.Namespace:
         help="Decimal places for ratio and cent outputs.",
     )
     parser.add_argument(
+        "--sort-by",
+        choices=SORT_CHOICES,
+        default="ratio",
+        help="Row ordering: globally by ratio (default) or grouped by EDO/step.",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=Path("tempered-intervals.txt"),
@@ -156,6 +212,7 @@ def write_output(
     include_unison: bool,
     include_octave: bool,
     precision: int,
+    sort_by: str,
     output_format: str,
     reporter: Reporter,
 ) -> int:
@@ -170,6 +227,7 @@ def write_output(
         "max_edo": max_edo,
         "include_unison": include_unison,
         "include_octave": include_octave,
+        "sort_by": sort_by,
         "total_rows": total_rows,
         "output_format": resolved_format,
     }
@@ -183,6 +241,13 @@ def write_output(
         "expression",
     ]
     progress = reporter.progress(total=total_rows, label="Tempered rows")
+    row_iterator = select_row_generator(
+        sort_by=sort_by,
+        min_edo=min_edo,
+        max_edo=max_edo,
+        include_unison=include_unison,
+        include_octave=include_octave,
+    )
 
     with output_path.open("w", encoding="utf-8", newline="") as handle:
         if resolved_format == "txt":
@@ -192,19 +257,12 @@ def write_output(
             handle.write(f"# max_edo={metadata['max_edo']}\n")
             handle.write(f"# include_unison={metadata['include_unison']}\n")
             handle.write(f"# include_octave={metadata['include_octave']}\n")
+            handle.write(f"# sort_by={metadata['sort_by']}\n")
             handle.write(f"# total_rows={metadata['total_rows']}\n")
             handle.write(f"# output_format={metadata['output_format']}\n")
             handle.write("\t".join(columns) + "\n")
 
-            for written, (edo, step, ratio, cents) in enumerate(
-                generate_rows(
-                    min_edo=min_edo,
-                    max_edo=max_edo,
-                    include_unison=include_unison,
-                    include_octave=include_octave,
-                ),
-                start=1,
-            ):
+            for written, (edo, step, ratio, cents) in enumerate(row_iterator, start=1):
                 expression = f"2^({step}/{edo})"
                 interval_name = edo_interval_name(step=step, edo=edo)
                 prime_factorization = prime_factorization_for_tempered_step(step=step, edo=edo)
@@ -217,15 +275,7 @@ def write_output(
             writer = csv.DictWriter(handle, fieldnames=columns)
             writer.writeheader()
 
-            for written, (edo, step, ratio, cents) in enumerate(
-                generate_rows(
-                    min_edo=min_edo,
-                    max_edo=max_edo,
-                    include_unison=include_unison,
-                    include_octave=include_octave,
-                ),
-                start=1,
-            ):
+            for written, (edo, step, ratio, cents) in enumerate(row_iterator, start=1):
                 expression = f"2^({step}/{edo})"
                 interval_name = edo_interval_name(step=step, edo=edo)
                 prime_factorization = prime_factorization_for_tempered_step(step=step, edo=edo)
@@ -247,15 +297,7 @@ def write_output(
             handle.write(f'  "columns": {json.dumps(columns, ensure_ascii=False)},\n')
             handle.write('  "rows": [\n')
             first = True
-            for written, (edo, step, ratio, cents) in enumerate(
-                generate_rows(
-                    min_edo=min_edo,
-                    max_edo=max_edo,
-                    include_unison=include_unison,
-                    include_octave=include_octave,
-                ),
-                start=1,
-            ):
+            for written, (edo, step, ratio, cents) in enumerate(row_iterator, start=1):
                 expression = f"2^({step}/{edo})"
                 interval_name = edo_interval_name(step=step, edo=edo)
                 prime_factorization = prime_factorization_for_tempered_step(step=step, edo=edo)
@@ -300,6 +342,7 @@ def main() -> None:
         include_unison=include_unison,
         include_octave=include_octave,
         precision=args.precision,
+        sort_by=args.sort_by,
         output_format=args.output_format,
         reporter=reporter,
     )
