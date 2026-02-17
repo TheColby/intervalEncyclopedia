@@ -31,13 +31,13 @@ All generators treat an interval as a frequency ratio $r = f_2 / f_1$ with $r > 
 Every ratio is mapped to cents by:
 
 $$
-\operatorname{cents}(r) = 1200\log_2(r).
+\mathrm{cents}(r) = 1200\log_2(r).
 $$
 
 Inverse mapping:
 
 $$
-r = 2^{\operatorname{cents}/1200}.
+r = 2^{\mathrm{cents}/1200}.
 $$
 
 ### Octave Reduction
@@ -77,9 +77,9 @@ $$
 where $P(x)$ is the largest prime factor of $x$,
 - odd limit:
 $$
-\max\big(\operatorname{odd}(n),\operatorname{odd}(d)\big),
+\max\big(\mathrm{odd}(n),\mathrm{odd}(d)\big),
 $$
-with $\operatorname{odd}(x)$ obtained by removing all powers of $2$ from $x$.
+with $\mathrm{odd}(x)$ obtained by removing all powers of $2$ from $x$.
 
 ### Equal Temperament (EDO)
 
@@ -160,7 +160,8 @@ All generator scripts share:
 All generator scripts now support explicit output-format selection plus extension-based auto detection.
 
 - Use `--output-format auto` to infer from `--output` file extension.
-- For the volume generators and master script, `.txt`, `.csv`, and `.json` are supported output extensions.
+- For the volume generators, `.txt`, `.csv`, and `.json` are supported output extensions.
+- For the master script, `.txt`, `.csv`, `.json`, `.tex`, and `.pdf` are supported output extensions.
 - For the musical table exporter, `.csv` and `.json` are supported output extensions.
 
 I/O matrix:
@@ -172,7 +173,7 @@ I/O matrix:
 - `generate-historical-intervals.py`:
   outputs: `txt`, `csv`, `json`; imported source inputs: `.tsv`, `.csv`, `.json`; extra interval input: `--extra-source` (`.tsv`, `.csv`, `.json`) plus legacy alias `--extra-json`.
 - `generate-master-encyclopedia.py`:
-  outputs: `txt`, `csv`, `json`; source volume inputs: `.txt`, `.csv`, `.json`.
+  outputs: `txt`, `csv`, `json`, `latex`, `pdf`; source volume inputs: `.txt`, `.csv`, `.json`.
 - `generate-musical-intervals-csv.py`:
   outputs: `csv`, `json`; inputs: HTML table from `--url`.
 
@@ -295,20 +296,42 @@ Run:
 ```bash
 python3 /Users/cleider/dev/intervalEncoclopedia/generate-master-encyclopedia.py \
   --regenerate-all \
-  --output /Users/cleider/dev/intervalEncoclopedia/interval-encyclopedia-master.txt
+  --output /Users/cleider/dev/intervalEncoclopedia/the-tuning-encyclopedia.txt
 ```
 
 Behavior:
 
 - regenerates all sources with `--regenerate-all`,
 - can fail fast on missing sources with `--skip-generation`,
-- supports `--output-format auto|txt|csv|json`,
+- supports `--output-format auto|txt|csv|json|latex|pdf`,
 - accepts mixed source formats for `--just-input`, `--tempered-input`, and `--historical-input` (`.txt`, `.csv`, `.json`),
 - forwards `--historical-extra-source` to the historical generator (legacy alias: `--historical-extra-json`),
+- supports PDF compile controls with `--latex-engine`, `--latex-runs`, and `--pdf-keep-tex`,
 - writes volume markers only for text master output:
   `%%<VOLUME:JUST:BEGIN>` ... `%%<VOLUME:JUST:END>`,
   `%%<VOLUME:TEMPERED:BEGIN>` ... `%%<VOLUME:TEMPERED:END>`,
   `%%<VOLUME:HISTORICAL:BEGIN>` ... `%%<VOLUME:HISTORICAL:END>`.
+
+Generate a page-numbered LaTeX book:
+
+```bash
+python3 /Users/cleider/dev/intervalEncoclopedia/generate-master-encyclopedia.py \
+  --skip-generation \
+  --output /Users/cleider/dev/intervalEncoclopedia/the-tuning-encyclopedia.tex \
+  --output-format latex
+```
+
+Generate a page-numbered PDF book:
+
+```bash
+python3 /Users/cleider/dev/intervalEncoclopedia/generate-master-encyclopedia.py \
+  --skip-generation \
+  --output /Users/cleider/dev/intervalEncoclopedia/the-tuning-encyclopedia.pdf \
+  --output-format pdf \
+  --latex-engine auto \
+  --latex-runs 2 \
+  --pdf-keep-tex
+```
 
 ## Musical Table Export
 
