@@ -1,0 +1,69 @@
+# source_url=https://www.huygens-fokker.org/bpsite/intervals.html
+# extracted_utc=2026-02-17T00:00:00Z
+ratio	name	source_page	source_url	extraction_method
+27/25	BP first	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	bp_intervals_table
+25/21	BP second	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	bp_intervals_table
+9/7	BP third	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	bp_intervals_table
+7/5	BP fourth	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	bp_intervals_table
+75/49	BP fifth	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	bp_intervals_table
+5/3	BP sixth	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	bp_intervals_table
+9/5	BP seventh	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	bp_intervals_table
+49/25	BP eighth	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	bp_intervals_table
+15/7	BP ninth	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	bp_intervals_table
+7/3	BP tenth	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	bp_intervals_table
+63/25	BP eleventh	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	bp_intervals_table
+25/9	BP twelfth	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	bp_intervals_table
+3/1	BP thirteenth, or tritave	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	bp_intervals_table
+49/45	BP first (enharmonic)	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_continuation
+375/343	BP first (enharmonic)	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_continuation
+625/567	BP first (enharmonic)	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_continuation
+729/625	BP second	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_class_anchor
+147/125	BP second (enharmonic)	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_continuation
+405/343	BP second (enharmonic)	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_continuation
+25/21	BP second (enharmonic)	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_continuation
+3969/3125	BP third	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_class_anchor
+2401/1875	BP third (enharmonic)	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_continuation
+9/7	BP third (enharmonic)	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_continuation
+35/27	BP third (enharmonic)	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_continuation
+243/175	BP fourth	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_class_anchor
+7/5	BP fourth (enharmonic)	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_continuation
+3375/2401	BP fourth (enharmonic)	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_continuation
+625/441	BP fourth (enharmonic)	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_continuation
+189/125	BP fifth	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_class_anchor
+343/225	BP fifth (enharmonic)	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_continuation
+75/49	BP fifth (enharmonic)	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_continuation
+125/81	BP fifth (enharmonic)	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_continuation
+5103/3125	BP sixth	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_class_anchor
+1029/625	BP sixth (enharmonic)	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_continuation
+81/49	BP sixth (enharmonic)	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_continuation
+5/3	BP sixth (enharmonic)	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_continuation
+49/27	BP seventh (enharmonic)	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_continuation
+625/343	BP seventh (enharmonic)	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_continuation
+3125/1701	BP seventh (enharmonic)	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_continuation
+243/125	BP eighth	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_class_anchor
+49/25	BP eighth (enharmonic)	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_continuation
+675/343	BP eighth (enharmonic)	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_continuation
+125/63	BP eighth (enharmonic)	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_continuation
+1323/625	BP ninth	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_class_anchor
+2401/1125	BP ninth (enharmonic)	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_continuation
+15/7	BP ninth (enharmonic)	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_continuation
+175/81	BP ninth (enharmonic)	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_continuation
+81/35	BP tenth	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_class_anchor
+7/3	BP tenth (enharmonic)	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_continuation
+5625/2401	BP tenth (enharmonic)	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_continuation
+3125/1323	BP tenth (enharmonic)	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_continuation
+343/135	BP eleventh (enharmonic)	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_continuation
+125/49	BP eleventh (enharmonic)	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_continuation
+625/243	BP eleventh (enharmonic)	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_continuation
+1701/625	BP twelfth	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_class_anchor
+343/125	BP twelfth (enharmonic)	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_continuation
+135/49	BP twelfth (enharmonic)	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_continuation
+25/9	BP twelfth (enharmonic)	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_continuation
+3/1	BP thirteenth	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	enharmonics_table_class_anchor
+1/1	unison	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	named_interval_class_table
+27/25	great limma, BP small semitone	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	named_interval_class_table
+9/5	just minor seventh, BP seventh	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	named_interval_class_table
+243/125	octave minus maximal diesis	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	named_interval_class_table
+81/35	Al-Hwarizmi's lute middle finger	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	named_interval_class_table
+63/25	BP eleventh, quasi-equal major tenth	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	named_interval_class_table
+3/1	just twelfth, BP thirteenth, "tritave"	The Bohlen-Pierce Site: BP Interval Properties	https://www.huygens-fokker.org/bpsite/intervals.html	named_interval_class_table

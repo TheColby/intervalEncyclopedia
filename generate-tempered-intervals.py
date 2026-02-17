@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Generate equal-tempered interval tables for the Interval Thesaurus.
+Generate equal-tempered interval tables for the intervalEncyclopedia.
 
-By default this outputs all steps for every EDO from 1 to 512.
+By default this outputs all steps for every EDO from 1 to 4800.
 """
 
 from __future__ import annotations
@@ -12,6 +12,13 @@ import math
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator, Tuple
+
+from cli_output import (
+    Reporter,
+    add_output_control_args,
+    create_reporter,
+    validate_output_control_args,
+)
 
 
 def generate_rows(
@@ -38,6 +45,31 @@ def count_rows(
     return total
 
 
+def prime_factorization_for_tempered_step(step: int, edo: int) -> str:
+    # Only step 0 and step edo are rational powers of 2 within the generated range.
+    if step == 0:
+        return "1"
+    if step == edo:
+        return "2"
+    return "-"
+
+
+def ordinal_suffix(value: int) -> str:
+    if 10 <= (value % 100) <= 20:
+        return "th"
+    return {1: "st", 2: "nd", 3: "rd"}.get(value % 10, "th")
+
+
+def edo_interval_name(step: int, edo: int) -> str:
+    ordinal = f"{step}{ordinal_suffix(step)}"
+    base_name = f"{ordinal} scale degree of {edo}-TET"
+    if step == 0:
+        return f"Unison of {edo}-TET (degree 0)"
+    if step == edo:
+        return f"Octave of {edo}-TET ({base_name})"
+    return base_name
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Generate equal-tempered interval ratios up to a target EDO."
@@ -51,7 +83,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-edo",
         type=int,
-        default=512,
+        default=4800,
         help="Largest equal division of the octave to include.",
     )
     parser.add_argument(
@@ -67,7 +99,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--precision",
         type=int,
-        default=15,
+        default=24,
         help="Decimal places for ratio and cent outputs.",
     )
     parser.add_argument(
@@ -76,6 +108,7 @@ def parse_args() -> argparse.Namespace:
         default=Path("tempered-intervals.txt"),
         help="Output text file path.",
     )
+    add_output_control_args(parser)
     return parser.parse_args()
 
 
@@ -91,6 +124,7 @@ def validate_args(args: argparse.Namespace) -> None:
     include_octave = not args.exclude_octave
     if not include_unison and not include_octave and args.min_edo == 1 and args.max_edo == 1:
         raise ValueError("With EDO=1, excluding both unison and octave leaves no rows.")
+    validate_output_control_args(args)
 
 
 def write_output(
@@ -100,10 +134,12 @@ def write_output(
     include_unison: bool,
     include_octave: bool,
     precision: int,
+    reporter: Reporter,
 ) -> int:
     total_rows = count_rows(min_edo, max_edo, include_unison, include_octave)
+    reporter.info(f"Writing {total_rows} equal-tempered rows...")
     with output_path.open("w", encoding="utf-8") as handle:
-        handle.write("# Interval Thesaurus - Equal Tempered Intervals\n")
+        handle.write("# intervalEncyclopedia - Equal Tempered Intervals\n")
         handle.write(
             f"# generated_utc={datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}\n"
         )
@@ -112,8 +148,10 @@ def write_output(
         handle.write(f"# include_unison={include_unison}\n")
         handle.write(f"# include_octave={include_octave}\n")
         handle.write(f"# total_rows={total_rows}\n")
-        handle.write("edo\tstep\tratio\tcents\texpression\n")
+        handle.write("edo\tstep\tinterval_name\tratio\tprime_factorization\tcents\texpression\n")
 
+        progress = reporter.progress(total=total_rows, label="Tempered rows")
+        written = 0
         for edo, step, ratio, cents in generate_rows(
             min_edo=min_edo,
             max_edo=max_edo,
@@ -121,9 +159,16 @@ def write_output(
             include_octave=include_octave,
         ):
             expression = f"2^({step}/{edo})"
+            interval_name = edo_interval_name(step=step, edo=edo)
+            prime_factorization = prime_factorization_for_tempered_step(step=step, edo=edo)
             handle.write(
-                f"{edo}\t{step}\t{ratio:.{precision}f}\t{cents:.{precision}f}\t{expression}\n"
+                f"{edo}\t{step}\t{interval_name}\t{ratio:.{precision}f}\t"
+                f"{prime_factorization}\t{cents:.{precision}f}\t{expression}\n"
             )
+            written += 1
+            progress.update(written)
+
+        progress.finish()
 
     return total_rows
 
@@ -131,6 +176,7 @@ def write_output(
 def main() -> None:
     args = parse_args()
     validate_args(args)
+    reporter = create_reporter(args)
 
     include_unison = not args.exclude_unison
     include_octave = not args.exclude_octave
@@ -141,8 +187,9 @@ def main() -> None:
         include_unison=include_unison,
         include_octave=include_octave,
         precision=args.precision,
+        reporter=reporter,
     )
-    print(f"Wrote {total} rows to {args.output}")
+    reporter.print_result(f"Wrote {total} rows to {args.output}")
 
 
 if __name__ == "__main__":

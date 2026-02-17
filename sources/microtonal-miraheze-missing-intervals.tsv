@@ -1,0 +1,22 @@
+# source_url=https://microtonal.miraheze.org/wiki/Main_Page
+# scan_scope=all_main_namespace_pages_with_full_wikitext_batches
+ratio	name	source_page	source_url	extraction_method
+1/1	Perfect octave	Octave	https://microtonal.miraheze.org/wiki/Octave	infobox_just_interval
+1/1	unison	Unison	https://microtonal.miraheze.org/wiki/Unison	infobox_just_interval
+15625/15552	Kleisma	Kleisma	https://microtonal.miraheze.org/wiki/Kleisma	mbox_ratio
+2109375/2097152	Semicomma	Semicomma	https://microtonal.miraheze.org/wiki/Semicomma	mbox_ratio
+126/125	Septimal semicomma	Septimal semicomma	https://microtonal.miraheze.org/wiki/Septimal_semicomma	mbox_ratio
+81/80	Syntonic comma	Syntonic comma	https://microtonal.miraheze.org/wiki/Syntonic_comma	mbox_ratio
+64/63	Septimal comma	Septimal comma	https://microtonal.miraheze.org/wiki/Septimal_comma	mbox_ratio
+49/48	Septimal diesis	Septimal diesis	https://microtonal.miraheze.org/wiki/Septimal_diesis	mbox_ratio
+36/35	Septimal quarter tone	Septimal quarter tone	https://microtonal.miraheze.org/wiki/Septimal_quarter_tone	mbox_ratio
+28/27	Septimal third tone	Septimal third tone	https://microtonal.miraheze.org/wiki/Septimal_third_tone	mbox_ratio
+25/24	Augmented unison	Augmented unison	https://microtonal.miraheze.org/wiki/Augmented_unison	infobox_just_interval
+135/128	Major limma	Major limma	https://microtonal.miraheze.org/wiki/Major_limma	mbox_ratio
+17/16	Minor diatonic semitone	Minor diatonic semitone	https://microtonal.miraheze.org/wiki/Minor_diatonic_semitone	infobox_just_interval
+2187/2048	Augmented unison	Augmented unison	https://microtonal.miraheze.org/wiki/Augmented_unison	infobox_just_interval
+10/9	major second	Major second	https://microtonal.miraheze.org/wiki/Major_second	infobox_just_interval
+9/8	major second	Major second	https://microtonal.miraheze.org/wiki/Major_second	infobox_just_interval
+32/21	Diminished sixth	Diminished sixth	https://microtonal.miraheze.org/wiki/Diminished_sixth	infobox_just_interval
+49/32	Diminished sixth	Diminished sixth	https://microtonal.miraheze.org/wiki/Diminished_sixth	infobox_just_interval
+192/125	Diminished sixth	Diminished sixth	https://microtonal.miraheze.org/wiki/Diminished_sixth	infobox_just_interval
