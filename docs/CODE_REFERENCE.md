@@ -168,11 +168,11 @@ Let $R(H)$ be number of generated rows at bound $H$.
 - LPF table is approximately $O(H\log\log H)$ by sieve behavior,
 - memory is dominated by LPF table and harmonic-label map.
 
-## 3) Equal Tempered Intervals (`generate-tempered-intervals.py`)
+## 3) Equal-Division (EDO) Intervals (`generate-tempered-intervals.py`)
 
 ### Goal
 
-Enumerate equal-tempered steps across a configured EDO range.
+Enumerate EDO steps across a configured equal-division range.
 
 For EDO $N$ and step $k$:
 
@@ -205,7 +205,7 @@ Legacy grouped order remains available via `--sort-by edo-step`.
 `edo_interval_name(step, edo)` produces human labels, for example:
 
 $$
-2^{12/13} \mapsto \text{"12th scale degree of 13-TET"}.
+2^{12/13} \mapsto \text{"12th scale degree of 13-EDO"}.
 $$
 
 Special cases:
@@ -269,7 +269,8 @@ Default generated-family ranges are intentionally moderate:
 
 - `HistoricalInterval`
   - `slug`, `name`, `expression`, `value`, `tradition`, `note`,
-    `subgroup_monzo`, `fjs_name`, `comma_size`, `xen_url`
+    `subgroup_monzo`, `fjs_name`, `comma_size`, `xen_url`,
+    `cents_min`, `cents_max`, `culture`, `aliases`
 - `Annotation`
   - family metadata templates for generated rows
 - `CarlosScale`
@@ -328,11 +329,15 @@ If parsing fails (irrational expressions), output is `-`.
   - `read_miraheze_interval_tsv(path)`
   - `read_huygens_fokker_interval_tsv(path)`
   - `read_xenharmonic_wiki_interval_tsv(path)`
+  - `read_world_intervals(path, source_label)` for curated Indian/Greek/Middle Eastern sets
+  - plus a cross-regional `world-music-famous-intervals.tsv` default import path
 
 These readers preserve provenance fields in notes where present.  
 Xenharmonic Wiki imports additionally carry optional metadata fields:
 `subgroup_monzo`, `fjs_name`, `comma_size`, and `xen_url`.
 Reference site: [Xenharmonic Wiki](https://en.xen.wiki/).
+World-music imports may also include contextual range fields
+(`cents_min`, `cents_max`) plus `culture` and `aliases`.
 
 ### Output serializers
 
@@ -518,13 +523,17 @@ Columns:
 3. `ratio`
 4. `prime_factorization`
 5. `cents`
-6. `expression`
-7. `subgroup_monzo`
-8. `fjs_name`
-9. `comma_size`
-10. `xen_url`
-11. `tradition`
-12. `note`
+6. `cents_min`
+7. `cents_max`
+8. `expression`
+9. `subgroup_monzo`
+10. `fjs_name`
+11. `comma_size`
+12. `xen_url`
+13. `culture`
+14. `aliases`
+15. `tradition`
+16. `note`
 
 ### Master CSV table
 

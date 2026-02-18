@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Generate equal-tempered interval tables for the intervalEncyclopedia.
+Generate equal-division-of-the-octave (EDO) interval tables for intervalEncyclopedia.
 
 By default this outputs all steps for every EDO from 1 to 96.
 """
@@ -128,17 +128,17 @@ def ordinal_suffix(value: int) -> str:
 
 def edo_interval_name(step: int, edo: int) -> str:
     ordinal = f"{step}{ordinal_suffix(step)}"
-    base_name = f"{ordinal} scale degree of {edo}-TET"
+    base_name = f"{ordinal} scale degree of {edo}-EDO"
     if step == 0:
-        return f"Unison of {edo}-TET (degree 0)"
+        return f"Unison of {edo}-EDO (degree 0)"
     if step == edo:
-        return f"Octave of {edo}-TET ({base_name})"
+        return f"Octave of {edo}-EDO ({base_name})"
     return base_name
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Generate equal-tempered interval ratios up to a target EDO."
+        description="Generate equal-division-of-the-octave interval ratios up to a target EDO."
     )
     parser.add_argument(
         "--min-edo",
@@ -218,10 +218,10 @@ def write_output(
 ) -> int:
     total_rows = count_rows(min_edo, max_edo, include_unison, include_octave)
     resolved_format = infer_output_format(output_path=output_path, requested_format=output_format)
-    reporter.info(f"Writing {total_rows} equal-tempered rows ({resolved_format})...")
+    reporter.info(f"Writing {total_rows} EDO rows ({resolved_format})...")
 
     metadata = {
-        "title": "intervalEncyclopedia - Equal Tempered Intervals",
+        "title": "intervalEncyclopedia - Equal Division of the Octave (EDO) Intervals",
         "generated_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "min_edo": min_edo,
         "max_edo": max_edo,

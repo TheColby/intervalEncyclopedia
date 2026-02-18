@@ -37,6 +37,7 @@ OVERFLOW_POLICY_CHOICES = ("ask", "keep", "abort", "fit", "larger-page")
 OUTPUT_FORMAT_CHOICES = ("auto", "txt", "csv", "json", "latex", "pdf")
 TABLE_FONT_SIZE_CHOICES = ("tiny", "scriptsize", "footnotesize", "small", "normalsize")
 LATEX_MATH_COLUMNS = {"ratio", "prime_factorization", "expression"}
+LATEX_MATH_DECIMAL_COLUMNS = {"ratio"}
 LATEX_WIDE_TEXT_COLUMNS = {
     "title",
     "name",
@@ -57,7 +58,20 @@ LATEX_NUMERIC_COLUMNS = {
     "odd_limit",
     "total_rows",
 }
-SOFT_BREAK_PUNCTUATION = set("/-_:;=+|")
+LATEX_COLUMN_WEIGHT_MULTIPLIERS = {
+    "name": 1.35,
+    "interval_name": 1.35,
+    "note": 2.00,
+    "source_file": 1.35,
+    "expression": 1.35,
+    "prime_factorization": 1.35,
+    "ratio": 1.15,
+    "subgroup_monzo": 1.20,
+    "xen_url": 1.25,
+}
+MATH_DIGIT_BREAK_GROUP = 3
+MATH_LONG_NUMBER_BREAK_THRESHOLD = 9
+SOFT_BREAK_PUNCTUATION = set("/-_:;=+|,[]()<>")
 LATEX_DIMENSION_PATTERN = re.compile(r"^\d+(?:\.\d+)?(?:in|mm|cm|pt)$", re.IGNORECASE)
 ENCYCLOPEDIA_PATTERN = re.compile(r"encyclopedia", re.IGNORECASE)
 PAPER_SIZE_CANONICAL_TO_GEOMETRY = {
@@ -685,7 +699,35 @@ def math_identifier_to_latex(identifier: str) -> str:
         return r"\varphi"
     if lowered == "e":
         return "e"
-    return rf"\mathrm{{{latex_escape(identifier)}}}"
+    escaped = latex_escape(identifier).replace(r"\_", r"\allowbreak{}\_")
+    return rf"\mathrm{{{escaped}}}"
+
+
+def insert_soft_breaks_in_digits(digits: str, *, from_right: bool) -> str:
+    if len(digits) <= MATH_LONG_NUMBER_BREAK_THRESHOLD:
+        return digits
+    if from_right:
+        groups: List[str] = []
+        cursor = digits
+        while cursor:
+            groups.append(cursor[-MATH_DIGIT_BREAK_GROUP :])
+            cursor = cursor[: -MATH_DIGIT_BREAK_GROUP]
+        groups.reverse()
+        return r"\allowbreak{}".join(groups)
+    groups = [
+        digits[index : index + MATH_DIGIT_BREAK_GROUP]
+        for index in range(0, len(digits), MATH_DIGIT_BREAK_GROUP)
+    ]
+    return r"\allowbreak{}".join(groups)
+
+
+def format_math_number_token(token: str) -> str:
+    if "." in token:
+        whole, fractional = token.split(".", 1)
+        whole_text = insert_soft_breaks_in_digits(whole, from_right=True)
+        fractional_text = insert_soft_breaks_in_digits(fractional, from_right=False)
+        return f"{whole_text}.{fractional_text}"
+    return insert_soft_breaks_in_digits(token, from_right=True)
 
 
 def needs_parentheses(parent_op: str, child_node: object, is_right: bool = False) -> bool:
@@ -714,7 +756,7 @@ def ast_to_latex(node: object) -> str:
 
     node_type = node[0]
     if node_type == "num":
-        return node[1]
+        return format_math_number_token(node[1])
     if node_type == "ident":
         return math_identifier_to_latex(node[1])
     if node_type == "group":
@@ -745,7 +787,13 @@ def ast_to_latex(node: object) -> str:
         left = node[2]
         right = node[3]
         if operator == "/":
-            return rf"\frac{{{ast_to_latex(left)}}}{{{ast_to_latex(right)}}}"
+            left_text = ast_to_latex(left)
+            right_text = ast_to_latex(right)
+            if needs_parentheses("/", left):
+                left_text = rf"\left({left_text}\right)"
+            if needs_parentheses("/", right, is_right=True):
+                right_text = rf"\left({right_text}\right)"
+            return rf"{left_text}\allowbreak{{}}\mathbin{{/}}\allowbreak{{}}{right_text}"
         left_text = ast_to_latex(left)
         right_text = ast_to_latex(right)
         if needs_parentheses(operator, left):
@@ -753,8 +801,8 @@ def ast_to_latex(node: object) -> str:
         if needs_parentheses(operator, right, is_right=True):
             right_text = rf"\left({right_text}\right)"
         if operator == "*":
-            return rf"{left_text} \cdot {right_text}"
-        return rf"{left_text} {operator} {right_text}"
+            return rf"{left_text}\allowbreak{{}} \cdot \allowbreak{{}} {right_text}"
+        return rf"{left_text}\allowbreak{{}} {operator} \allowbreak{{}} {right_text}"
 
     raise ValueError(f"Unsupported expression AST node type: {node_type}")
 
@@ -828,7 +876,7 @@ def render_latex_cell(column: str, value: str, table_style: LatexTableStyle) -> 
     if normalized == "-":
         return "-"
     canonical = canonical_column_name(column)
-    if canonical in LATEX_NUMERIC_COLUMNS:
+    if canonical in LATEX_NUMERIC_COLUMNS or canonical in LATEX_MATH_DECIMAL_COLUMNS:
         normalized = format_numeric_cell_text(normalized, table_style)
     if canonical in LATEX_MATH_COLUMNS:
         return maybe_typeset_math(normalized, table_style=table_style)
@@ -837,12 +885,14 @@ def render_latex_cell(column: str, value: str, table_style: LatexTableStyle) -> 
 
 def latex_column_weight(canonical_column: str, table_style: LatexTableStyle) -> float:
     if canonical_column in LATEX_WIDE_TEXT_COLUMNS:
-        return table_style.weight_text
-    if canonical_column in LATEX_MATH_COLUMNS:
-        return table_style.weight_math
-    if canonical_column in LATEX_NUMERIC_COLUMNS:
-        return table_style.weight_numeric
-    return table_style.weight_other
+        base_weight = table_style.weight_text
+    elif canonical_column in LATEX_MATH_COLUMNS:
+        base_weight = table_style.weight_math
+    elif canonical_column in LATEX_NUMERIC_COLUMNS:
+        base_weight = table_style.weight_numeric
+    else:
+        base_weight = table_style.weight_other
+    return base_weight * LATEX_COLUMN_WEIGHT_MULTIPLIERS.get(canonical_column, 1.0)
 
 
 def latex_column_alignment(canonical_column: str) -> str:
@@ -944,7 +994,9 @@ def build_latex_table_for_volume(
         table_style.fit_tabcolsep_pt if compact_tables else table_style.tabcolsep_pt
     )
     tabcolsep = f"{tabcolsep_value:.2f}pt"
-    header_cells = " & ".join(latex_escape(column) for column in columns) + r" \\"
+    header_cells = (
+        " & ".join(latex_escape_table_text(column, table_style) for column in columns) + r" \\"
+    )
     if table_style.header_shade:
         header_cells = r"\rowcolor{tableheader}" + " " + header_cells
 
@@ -1565,38 +1617,38 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--table-tabcolsep-pt",
         type=float,
-        default=4.0,
-        help="LaTeX table horizontal cell padding in pt for normal mode (default: 4.0).",
+        default=3.0,
+        help="LaTeX table horizontal cell padding in pt for normal mode (default: 3.0).",
     )
     parser.add_argument(
         "--table-fit-tabcolsep-pt",
         type=float,
-        default=2.0,
-        help="LaTeX table horizontal cell padding in pt for fit mode (default: 2.0).",
+        default=1.5,
+        help="LaTeX table horizontal cell padding in pt for fit mode (default: 1.5).",
     )
     parser.add_argument(
         "--table-arraystretch",
         type=float,
-        default=1.15,
-        help="LaTeX table row stretch multiplier (default: 1.15).",
+        default=1.25,
+        help="LaTeX table row stretch multiplier (default: 1.25).",
     )
     parser.add_argument(
         "--table-extra-row-height-pt",
         type=float,
-        default=0.6,
-        help="Extra row height added to every table row in pt (default: 0.6).",
+        default=0.9,
+        help="Extra row height added to every table row in pt (default: 0.9).",
     )
     parser.add_argument(
         "--table-row-strut-ex",
         type=float,
-        default=2.6,
-        help="Minimum row strut height in ex units applied to each cell (default: 2.6).",
+        default=3.0,
+        help="Minimum row strut height in ex units applied to each cell (default: 3.0).",
     )
     parser.add_argument(
         "--table-usable-width",
         type=float,
-        default=0.98,
-        help="Fraction of linewidth allocated to longtable columns in normal mode (default: 0.98).",
+        default=0.995,
+        help="Fraction of linewidth allocated to longtable columns in normal mode (default: 0.995).",
     )
     parser.add_argument(
         "--table-fit-usable-width",
@@ -1613,8 +1665,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--table-emergency-stretch-em",
         type=float,
-        default=2.0,
-        help="LaTeX emergencystretch value in em to reduce overfull boxes (default: 2.0).",
+        default=6.0,
+        help="LaTeX emergencystretch value in em to reduce overfull boxes (default: 6.0).",
     )
     parser.add_argument(
         "--table-break-long-tokens",
@@ -1632,16 +1684,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--table-break-chunk",
         type=int,
-        default=14,
-        help="Character chunk size for inserted long-token soft breaks (default: 14).",
+        default=4,
+        help="Character chunk size for inserted long-token soft breaks (default: 4).",
     )
     parser.add_argument(
         "--table-max-decimals",
         type=int,
-        default=12,
+        default=10,
         help=(
             "Maximum fractional digits shown for plain decimal numeric fields in LaTeX/PDF tables "
-            "(default: 12; set to a large value to preserve more digits)."
+            "(default: 10; set to a large value to preserve more digits)."
         ),
     )
     parser.add_argument(
@@ -1714,7 +1766,7 @@ def parse_args() -> argparse.Namespace:
         "--tempered-input",
         type=Path,
         default=Path("tempered-intervals.txt"),
-        help="Input path for equal-tempered intervals source.",
+        help="Input path for equal-division-of-the-octave (EDO) intervals source.",
     )
     parser.add_argument(
         "--historical-input",
@@ -1977,7 +2029,7 @@ def main() -> None:
 
     volumes = [
         read_volume("JUST", "Just Intervals", args.just_input),
-        read_volume("TEMPERED", "Equal-Tempered Intervals", args.tempered_input),
+        read_volume("TEMPERED", "Equal-Division (EDO) Intervals", args.tempered_input),
         read_volume(
             "HISTORICAL",
             "Historical and Esoteric Irrational Intervals",

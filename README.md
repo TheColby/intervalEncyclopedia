@@ -3,7 +3,7 @@
 `intervalEncyclopedia` generates a large-scale, reproducible corpus of musical intervals across three major families:
 
 1. just (rational) intervals,
-2. equal-tempered intervals,
+2. equal-division-of-the-octave (EDO) intervals,
 3. historical/esoteric interval systems (including irrational and non-octave families).
 
 The repository is designed for both computational analysis and publication workflows (plain-text volumes and stitched master tome output). The compiled master tome is called "The Tuning Encyclopedia."
@@ -212,7 +212,7 @@ Algorithm notes:
 - sieve-based largest-prime-factor table,
 - optional prime-limit post-filter.
 
-## Volume II: Equal Tempered Intervals
+## Volume II: Equal-Division (EDO) Intervals
 
 Run:
 
@@ -247,7 +247,7 @@ Output columns:
 Naming convention example:
 
 $$
-2^{12/13} \Rightarrow \text{"12th scale degree of 13-TET"}.
+2^{12/13} \Rightarrow \text{"12th scale degree of 13-EDO"}.
 $$
 
 ## Volume III: Historical and Esoteric Intervals
@@ -269,12 +269,16 @@ Main options:
 - `--miraheze-source path.{tsv,csv,json}`, `--exclude-miraheze`
 - `--huygens-fokker-source path.{tsv,csv,json}`, `--exclude-huygens-fokker`
 - `--xen-wiki-source path.{tsv,csv,json}`, `--exclude-xen-wiki`
+- `--indian-source path.{tsv,csv,json}`, `--exclude-indian`
+- `--greek-source path.{tsv,csv,json}`, `--exclude-greek`
+- `--middle-east-source path.{tsv,csv,json}`, `--exclude-middle-east`
+- `--world-source path.{tsv,csv,json}`, `--exclude-world`
 - `--min-octave-edo N`, `--max-octave-edo N`
 - `--min-tritave-edt N`, `--max-tritave-edt N`
 - `--min-consonance-divisions N`, `--max-consonance-divisions N`
 
 `--extra-source` rows support:
-`slug,name,expression,value[,tradition,note,subgroup_monzo,fjs_name,comma_size,xen_url]`.
+`slug,name,expression,value[,tradition,note,subgroup_monzo,fjs_name,comma_size,xen_url,cents_min,cents_max,culture,aliases]`.
 
 Default generated-family maxima are `64` (octave EDO), `32` (tritave EDT), and `32` (consonance families).
 
@@ -284,6 +288,10 @@ Default source imports:
 - `/Users/cleider/dev/intervalEncoclopedia/sources/microtonal-miraheze-missing-intervals.tsv`
 - `/Users/cleider/dev/intervalEncoclopedia/sources/huygens-fokker-bpsite-intervals.tsv`
 - `/Users/cleider/dev/intervalEncoclopedia/sources/xenharmonic-wiki-missing-intervals.tsv`
+- `/Users/cleider/dev/intervalEncoclopedia/sources/indian-classical-intervals.tsv`
+- `/Users/cleider/dev/intervalEncoclopedia/sources/greek-intervals.tsv`
+- `/Users/cleider/dev/intervalEncoclopedia/sources/middle-east-intervals.tsv`
+- `/Users/cleider/dev/intervalEncoclopedia/sources/world-music-famous-intervals.tsv`
 
 Output columns:
 
@@ -292,17 +300,23 @@ Output columns:
 - `ratio`
 - `prime_factorization`
 - `cents`
+- `cents_min`
+- `cents_max`
 - `expression`
 - `subgroup_monzo`
 - `fjs_name`
 - `comma_size`
 - `xen_url`
+- `culture`
+- `aliases`
 - `tradition`
 - `note`
 
 Reference note:
 
 - Xen-derived entries include source URLs from [Xenharmonic Wiki](https://en.xen.wiki/), and the historical generator now imports Xen rows by default unless `--exclude-xen-wiki` is set.
+- Indian, Greek, and Middle Eastern additions include both exact ratios and contextual range-annotated interval names where practice-dependent intonation is common.
+- The world source adds widely cited interval classes from additional traditions (for example Turkish comma classes, Arabic maqam interval classes, Byzantine moria classes, Indonesian slendro/pelog classes, Thai seven-step classes, and Chinese 12-lü ratios).
 
 ## Master Assembly
 
@@ -436,13 +450,13 @@ For current defaults:
 
 - just rows: $15{,}616$
 - tempered rows: $4{,}752$
-- historical rows: $4{,}536$
-- combined rows: $24{,}904$
+- historical rows: $4{,}629$
+- combined rows: $24{,}997$
 
 At approximately $50$ rows per printed page, the default profile is about:
 
 $$
-\frac{24{,}904}{50} \approx 498\ \text{pages}.
+\frac{24{,}997}{50} \approx 500\ \text{pages}.
 $$
 
 Empirical growth intuition:

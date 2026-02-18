@@ -1,0 +1,17 @@
+slug	name	expression	value	tradition	note	subgroup_monzo	fjs_name	comma_size	xen_url	cents_min	cents_max	culture	aliases
+indian_sa	Sa (Shadja)	1/1	1.0	Indian classical swara practice (Hindustani and Carnatic)	Tonic reference pitch class in many raga frameworks.					0	0	Indian	Shadja,Sa,S
+indian_re_komal	Komal Re	16/15	1.0666666666666667	Indian classical swara practice (Hindustani and Carnatic)	Common just-intonation proxy for lowered second; intonation varies by raga and gharana.					80	120	Indian	Komal Rishabh,Re flat,r
+indian_re_shuddh	Shuddh Re	9/8	1.125	Indian classical swara practice (Hindustani and Carnatic)	Raised second in many scalar frameworks.					180	220	Indian	Shuddha Rishabh,Re,R
+indian_ga_komal	Komal Ga	6/5	1.2	Indian classical swara practice (Hindustani and Carnatic)	Lowered third; often treated contextually.					280	330	Indian	Komal Gandhar,Ga flat,g
+indian_ga_shuddh	Shuddh Ga	5/4	1.25	Indian classical swara practice (Hindustani and Carnatic)	Natural third reference in many pedagogical mappings.					360	410	Indian	Shuddha Gandhar,Ga,G
+indian_ma_shuddh	Shuddh Ma	4/3	1.3333333333333333	Indian classical swara practice (Hindustani and Carnatic)	Perfect fourth reference.					490	510	Indian	Shuddha Madhyam,Ma,M
+indian_ma_tivra	Tivra Ma	45/32	1.40625	Indian classical swara practice (Hindustani and Carnatic)	Raised fourth; often notated as sharp Ma.					560	620	Indian	Tivra Madhyam,Ma sharp,m+
+indian_pa	Pa (Pancham)	3/2	1.5	Indian classical swara practice (Hindustani and Carnatic)	Perfect fifth reference pitch class.					700	700	Indian	Pancham,Pa,P
+indian_dha_komal	Komal Dha	8/5	1.6	Indian classical swara practice (Hindustani and Carnatic)	Lowered sixth; realized differently across ragas.					760	820	Indian	Komal Dhaivat,Dha flat,d
+indian_dha_shuddh	Shuddh Dha	5/3	1.6666666666666667	Indian classical swara practice (Hindustani and Carnatic)	Natural sixth in many pedagogical scales.					860	920	Indian	Shuddha Dhaivat,Dha,D
+indian_ni_komal	Komal Ni	9/5	1.8	Indian classical swara practice (Hindustani and Carnatic)	Lowered seventh; practice-dependent intonation.					960	1030	Indian	Komal Nishad,Ni flat,n
+indian_ni_shuddh	Shuddh Ni	15/8	1.875	Indian classical swara practice (Hindustani and Carnatic)	Natural seventh reference.					1060	1120	Indian	Shuddha Nishad,Ni,N
+indian_r1	Shuddha Rishabha (R1)	256/243	1.0534979423868314	Carnatic swarasthana nomenclature	Common Carnatic R1 mapping in ratio-based pedagogical tables.					85	105	Indian	R1,Shuddha Ri
+indian_g2	Sadharana Gandhara (G2)	32/27	1.1851851851851851	Carnatic swarasthana nomenclature	Common Carnatic G2 mapping in ratio-based pedagogical tables.					270	310	Indian	G2,Sadharana Ga
+indian_d1	Shuddha Dhaivata (D1)	128/81	1.5802469135802468	Carnatic swarasthana nomenclature	Common Carnatic D1 mapping in ratio-based pedagogical tables.					770	810	Indian	D1,Shuddha Dha
+indian_n2	Kaisiki Nishada (N2)	16/9	1.7777777777777777	Carnatic swarasthana nomenclature	Common Carnatic N2 mapping in ratio-based pedagogical tables.					980	1020	Indian	N2,Kaisiki Ni
