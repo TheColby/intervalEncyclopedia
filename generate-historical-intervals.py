@@ -140,7 +140,7 @@ TRITAVE_EDT_LANDMARKS: Dict[int, Annotation] = {
 
 OCTAVE_EDO_FALLBACK = Annotation(
     tradition="Contemporary xenharmonic equal-division cataloging (EDO)",
-    note_template="Systematic step {step} in {divisions}-EDO from broad historical/esoteric surveys.",
+    note_template="Systematic step {step} in {divisions}-EDO.",
 )
 
 TRITAVE_EDT_FALLBACK = Annotation(
