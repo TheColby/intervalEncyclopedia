@@ -800,6 +800,13 @@ def canonical_column_name(column: str) -> str:
     return normalize_cell_text(column).casefold().replace(" ", "_")
 
 
+def filter_columns_for_volume_chapter(volume: Volume, columns: Sequence[str]) -> List[str]:
+    # Chapter-specific table policy: hide historical "tradition" column in Chapter 4.
+    if volume.tag != "HISTORICAL":
+        return list(columns)
+    return [column for column in columns if canonical_column_name(column) != "tradition"]
+
+
 def format_numeric_cell_text(value: str, table_style: LatexTableStyle) -> str:
     if table_style.max_decimals is None:
         return value
@@ -921,6 +928,7 @@ def build_latex_table_for_volume(
     compact_tables: bool = False,
 ) -> List[str]:
     columns, rows = parse_volume_rows(volume)
+    columns = filter_columns_for_volume_chapter(volume, columns)
     if not columns:
         return [
             r"\section*{Source Content}",
