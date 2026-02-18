@@ -67,6 +67,10 @@ class HistoricalInterval:
     fjs_name: str = ""
     comma_size: str = ""
     xen_url: str = ""
+    cents_min: str = ""
+    cents_max: str = ""
+    culture: str = ""
+    aliases: str = ""
 
 
 @dataclass(frozen=True)
@@ -297,6 +301,13 @@ def clean_field(text: str) -> str:
     return text.replace("\t", " ").replace("\n", " ").strip()
 
 
+def parse_optional_float(value: Any) -> str:
+    text = str(value).strip()
+    if not text:
+        return ""
+    return f"{float(text):.12f}".rstrip("0").rstrip(".")
+
+
 def read_extra_intervals(path: Path) -> List[HistoricalInterval]:
     source_format = infer_source_format(path)
 
@@ -334,6 +345,10 @@ def read_extra_intervals(path: Path) -> List[HistoricalInterval]:
                     fjs_name=str(item.get("fjs_name", "")).strip(),
                     comma_size=str(item.get("comma_size", "")).strip(),
                     xen_url=str(item.get("xen_url", "")).strip(),
+                    cents_min=parse_optional_float(item.get("cents_min", "")),
+                    cents_max=parse_optional_float(item.get("cents_max", "")),
+                    culture=str(item.get("culture", "")).strip(),
+                    aliases=str(item.get("aliases", "")).strip(),
                 )
             except KeyError as error:
                 raise ValueError(f"Extra JSON item {index} is missing required key: {error}") from error
@@ -371,6 +386,10 @@ def read_extra_intervals(path: Path) -> List[HistoricalInterval]:
                     fjs_name=parts[7] if len(parts) > 7 else "",
                     comma_size=parts[8] if len(parts) > 8 else "",
                     xen_url=parts[9] if len(parts) > 9 else "",
+                    cents_min=parse_optional_float(parts[10]) if len(parts) > 10 else "",
+                    cents_max=parse_optional_float(parts[11]) if len(parts) > 11 else "",
+                    culture=parts[12] if len(parts) > 12 else "",
+                    aliases=parts[13] if len(parts) > 13 else "",
                 )
             )
     return records
@@ -715,6 +734,36 @@ def read_xenharmonic_wiki_interval_tsv(path: Path) -> List[HistoricalInterval]:
     )
 
 
+def read_world_intervals(path: Path, source_label: str) -> List[HistoricalInterval]:
+    rows = read_extra_intervals(path)
+    normalized: List[HistoricalInterval] = []
+    for row in rows:
+        note = row.note.strip()
+        if note:
+            note = f"{note} Source: {source_label}."
+        else:
+            note = f"Imported from {source_label}."
+        normalized.append(
+            HistoricalInterval(
+                slug=row.slug,
+                name=row.name,
+                expression=row.expression,
+                value=row.value,
+                tradition=row.tradition,
+                note=note,
+                subgroup_monzo=row.subgroup_monzo,
+                fjs_name=row.fjs_name,
+                comma_size=row.comma_size,
+                xen_url=row.xen_url,
+                cents_min=row.cents_min,
+                cents_max=row.cents_max,
+                culture=row.culture,
+                aliases=row.aliases,
+            )
+        )
+    return normalized
+
+
 def format_power_expression(base_expression: str, step: int, divisions: int) -> str:
     if "/" in base_expression:
         return f"({base_expression})^({step}/{divisions})"
@@ -909,6 +958,38 @@ def build_interval_corpus(args: argparse.Namespace, reporter: Reporter) -> List[
     if not args.exclude_xen_wiki:
         reporter.verbose(f"Importing Xenharmonic Wiki intervals from {args.xen_wiki_source}...")
         rows.extend(read_xenharmonic_wiki_interval_tsv(args.xen_wiki_source))
+    if not args.exclude_indian:
+        reporter.verbose(f"Importing Indian classical intervals from {args.indian_source}...")
+        rows.extend(
+            read_world_intervals(
+                args.indian_source,
+                source_label="Indian classical interval source",
+            )
+        )
+    if not args.exclude_greek:
+        reporter.verbose(f"Importing Greek intervals from {args.greek_source}...")
+        rows.extend(
+            read_world_intervals(
+                args.greek_source,
+                source_label="Greek interval source",
+            )
+        )
+    if not args.exclude_middle_east:
+        reporter.verbose(f"Importing Middle Eastern intervals from {args.middle_east_source}...")
+        rows.extend(
+            read_world_intervals(
+                args.middle_east_source,
+                source_label="Middle Eastern interval source",
+            )
+        )
+    if not args.exclude_world:
+        reporter.verbose(f"Importing world-music intervals from {args.world_source}...")
+        rows.extend(
+            read_world_intervals(
+                args.world_source,
+                source_label="World music interval source",
+            )
+        )
 
     effective_extra_source = args.extra_source or args.extra_json
     if effective_extra_source is not None:
@@ -960,7 +1041,8 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help=(
             "Optional extra interval source in JSON/CSV/TSV with columns "
-            "slug,name,expression,value[,tradition,note,subgroup_monzo,fjs_name,comma_size,xen_url]."
+            "slug,name,expression,value[,tradition,note,subgroup_monzo,fjs_name,comma_size,"
+            "xen_url,cents_min,cents_max,culture,aliases]."
         ),
     )
     parser.add_argument(
@@ -1014,6 +1096,53 @@ def parse_args() -> argparse.Namespace:
         "--exclude-xen-wiki",
         action="store_true",
         help="Skip built-in Xenharmonic Wiki interval import.",
+    )
+    parser.add_argument(
+        "--indian-source",
+        type=Path,
+        default=Path(__file__).resolve().parent / "sources" / "indian-classical-intervals.tsv",
+        help="Source for imported Indian classical interval names (.tsv/.csv/.json).",
+    )
+    parser.add_argument(
+        "--exclude-indian",
+        action="store_true",
+        help="Skip built-in Indian classical interval import.",
+    )
+    parser.add_argument(
+        "--greek-source",
+        type=Path,
+        default=Path(__file__).resolve().parent / "sources" / "greek-intervals.tsv",
+        help="Source for imported Greek interval names (.tsv/.csv/.json).",
+    )
+    parser.add_argument(
+        "--exclude-greek",
+        action="store_true",
+        help="Skip built-in Greek interval import.",
+    )
+    parser.add_argument(
+        "--middle-east-source",
+        type=Path,
+        default=Path(__file__).resolve().parent / "sources" / "middle-east-intervals.tsv",
+        help="Source for imported Middle Eastern interval names (.tsv/.csv/.json).",
+    )
+    parser.add_argument(
+        "--exclude-middle-east",
+        action="store_true",
+        help="Skip built-in Middle Eastern interval import.",
+    )
+    parser.add_argument(
+        "--world-source",
+        type=Path,
+        default=Path(__file__).resolve().parent / "sources" / "world-music-famous-intervals.tsv",
+        help=(
+            "Source for imported cross-regional world-music interval names "
+            "(.tsv/.csv/.json)."
+        ),
+    )
+    parser.add_argument(
+        "--exclude-world",
+        action="store_true",
+        help="Skip built-in cross-regional world-music interval import.",
     )
     parser.add_argument(
         "--min-octave-edo",
@@ -1090,6 +1219,26 @@ def validate_args(args: argparse.Namespace) -> None:
             f"Xenharmonic Wiki source file not found: {args.xen_wiki_source}. "
             "Use --exclude-xen-wiki to skip import."
         )
+    if not args.exclude_indian and not args.indian_source.exists():
+        raise FileNotFoundError(
+            f"Indian source file not found: {args.indian_source}. "
+            "Use --exclude-indian to skip import."
+        )
+    if not args.exclude_greek and not args.greek_source.exists():
+        raise FileNotFoundError(
+            f"Greek source file not found: {args.greek_source}. "
+            "Use --exclude-greek to skip import."
+        )
+    if not args.exclude_middle_east and not args.middle_east_source.exists():
+        raise FileNotFoundError(
+            f"Middle East source file not found: {args.middle_east_source}. "
+            "Use --exclude-middle-east to skip import."
+        )
+    if not args.exclude_world and not args.world_source.exists():
+        raise FileNotFoundError(
+            f"World source file not found: {args.world_source}. "
+            "Use --exclude-world to skip import."
+        )
     validate_range(args.min_octave_edo, args.max_octave_edo, "octave EDO range")
     validate_range(args.min_tritave_edt, args.max_tritave_edt, "tritave EDT range")
     validate_range(
@@ -1135,11 +1284,15 @@ def write_output(
         "ratio",
         "prime_factorization",
         "cents",
+        "cents_min",
+        "cents_max",
         "expression",
         "subgroup_monzo",
         "fjs_name",
         "comma_size",
         "xen_url",
+        "culture",
+        "aliases",
         "tradition",
         "note",
     ]
@@ -1170,11 +1323,15 @@ def write_output(
                     f"{interval.value:.{precision}f}\t"
                     f"{clean_field(prime_factorization)}\t"
                     f"{cents:.{precision}f}\t"
+                    f"{clean_field(interval.cents_min)}\t"
+                    f"{clean_field(interval.cents_max)}\t"
                     f"{clean_field(interval.expression)}\t"
                     f"{clean_field(subgroup_monzo)}\t"
                     f"{clean_field(interval.fjs_name)}\t"
                     f"{clean_field(comma_size)}\t"
                     f"{clean_field(interval.xen_url)}\t"
+                    f"{clean_field(interval.culture)}\t"
+                    f"{clean_field(interval.aliases)}\t"
                     f"{clean_field(interval.tradition)}\t"
                     f"{clean_field(interval.note)}\n"
                 )
@@ -1199,11 +1356,15 @@ def write_output(
                         "ratio": f"{interval.value:.{precision}f}",
                         "prime_factorization": clean_field(prime_factorization),
                         "cents": f"{cents:.{precision}f}",
+                        "cents_min": clean_field(interval.cents_min),
+                        "cents_max": clean_field(interval.cents_max),
                         "expression": clean_field(interval.expression),
                         "subgroup_monzo": clean_field(subgroup_monzo),
                         "fjs_name": clean_field(interval.fjs_name),
                         "comma_size": clean_field(comma_size),
                         "xen_url": clean_field(interval.xen_url),
+                        "culture": clean_field(interval.culture),
+                        "aliases": clean_field(interval.aliases),
                         "tradition": clean_field(interval.tradition),
                         "note": clean_field(interval.note),
                     }
@@ -1231,11 +1392,15 @@ def write_output(
                     "ratio": f"{interval.value:.{precision}f}",
                     "prime_factorization": clean_field(prime_factorization),
                     "cents": f"{cents:.{precision}f}",
+                    "cents_min": clean_field(interval.cents_min),
+                    "cents_max": clean_field(interval.cents_max),
                     "expression": clean_field(interval.expression),
                     "subgroup_monzo": clean_field(subgroup_monzo),
                     "fjs_name": clean_field(interval.fjs_name),
                     "comma_size": clean_field(comma_size),
                     "xen_url": clean_field(interval.xen_url),
+                    "culture": clean_field(interval.culture),
+                    "aliases": clean_field(interval.aliases),
                     "tradition": clean_field(interval.tradition),
                     "note": clean_field(interval.note),
                 }

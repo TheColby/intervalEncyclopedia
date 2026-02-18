@@ -1,0 +1,15 @@
+slug	name	expression	value	tradition	note	subgroup_monzo	fjs_name	comma_size	xen_url	cents_min	cents_max	culture	aliases
+greek_diapason	Diapason	2/1	2.0	Ancient Greek harmonic and monochord theory	Octave equivalence reference.					1200	1200	Greek	Octave
+greek_diapente	Diapente	3/2	1.5	Ancient Greek harmonic and monochord theory	Perfect fifth in Greek interval nomenclature.					700	702	Greek	Perfect fifth
+greek_diatessaron	Diatessaron	4/3	1.3333333333333333	Ancient Greek harmonic and monochord theory	Perfect fourth in Greek interval nomenclature.					498	502	Greek	Perfect fourth
+greek_tonos	Tonos	9/8	1.125	Pythagorean Greek tuning lineage	Major tone used as a structural step.					200	205	Greek	Tone,major tone
+greek_leimma	Leimma (Limma)	256/243	1.0534979423868314	Pythagorean Greek tuning lineage	Diatonic semitone in Pythagorean arithmetic.					88	92	Greek	Limma,diatonic semitone
+greek_apotome	Apotome	2187/2048	1.06787109375	Pythagorean Greek tuning lineage	Chromatic semitone complement to the limma.					112	115	Greek	Pythagorean chromatic semitone
+greek_ditone	Ditone	81/64	1.265625	Pythagorean Greek tuning lineage	Two tones combined in Pythagorean tuning.					405	410	Greek	Major third (Pythagorean)
+greek_chromatic_semitone	Chromatic Semitone	16/15	1.0666666666666667	Greek chromatic genus reinterpretations	Common rational approximation used in modern reconstructions.					108	116	Greek	Minor semitone
+greek_chromatic_trihemitone	Chromatic Trihemitone	6/5	1.2	Greek chromatic genus reinterpretations	Larger chromatic-genus segment in many reconstructions.					300	330	Greek	Minor third segment
+greek_enharmonic_diesis	Enharmonic Diesis	2^(50/1200)	1.029302236643492	Greek enharmonic genus (practice-dependent reconstructions)	Representative quarter-tone-sized enharmonic micro-step.					35	65	Greek	Quarter tone,diesis
+greek_enharmonic_pyknon_lower	Enharmonic Pyknon Lower	2^(45/1200)	1.026333783890424	Greek enharmonic genus (practice-dependent reconstructions)	Lower pyknon part in some reconstructions; strongly context-dependent.					30	60	Greek	Pyknon lower
+greek_enharmonic_pyknon_upper	Enharmonic Pyknon Upper	2^(45/1200)	1.026333783890424	Greek enharmonic genus (practice-dependent reconstructions)	Upper pyknon part in some reconstructions; strongly context-dependent.					30	60	Greek	Pyknon upper
+greek_chromatic_pyknon_lower	Chromatic Pyknon Lower	2^(90/1200)	1.0533610359548358	Greek chromatic genus (practice-dependent reconstructions)	Representative lower pyknon value for chromatic genus analyses.					70	120	Greek	Chromatic pyknon lower
+greek_chromatic_pyknon_upper	Chromatic Pyknon Upper	2^(114/1200)	1.068068220106486	Greek chromatic genus (practice-dependent reconstructions)	Representative upper pyknon value for chromatic genus analyses.					95	130	Greek	Chromatic pyknon upper
