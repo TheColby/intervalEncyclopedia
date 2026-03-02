@@ -53,6 +53,8 @@ LATEX_NUMERIC_COLUMNS = {
     "edo",
     "step",
     "cents",
+    "cents_min",
+    "cents_max",
     "value",
     "largest_prime",
     "odd_limit",
@@ -74,6 +76,24 @@ MATH_LONG_NUMBER_BREAK_THRESHOLD = 9
 SOFT_BREAK_PUNCTUATION = set("/-_:;=+|,[]()<>")
 LATEX_DIMENSION_PATTERN = re.compile(r"^\d+(?:\.\d+)?(?:in|mm|cm|pt)$", re.IGNORECASE)
 ENCYCLOPEDIA_PATTERN = re.compile(r"encyclopedia", re.IGNORECASE)
+URL_PATTERN = re.compile(r"https?://\S+")
+URL_TRAILING_PUNCTUATION = ".,;:!?)]}"
+COLUMN_LABEL_OVERRIDES = {
+    "slug": "Source ID",
+    "ratio_decimal": "Ratio (decimal, high precision)",
+    "cents": "cents (exact)",
+    "cents_min": "cents (minimum)",
+    "cents_max": "cents (maximum)",
+}
+IMPORT_SLUG_LABELS = {
+    "scribd": "Scribd",
+    "miraheze": "Miraheze",
+    "huygens_fokker": "Huygens-Fokker",
+    "xen_wiki": "Xenharmonic Wiki",
+}
+IMPORT_SLUG_PATTERN = re.compile(
+    r"^(scribd|miraheze|huygens_fokker|xen_wiki)_(\d{4})$"
+)
 PAPER_SIZE_CANONICAL_TO_GEOMETRY = {
     "us-letter": ("letterpaper",),
     "us-legal": ("legalpaper",),
@@ -441,19 +461,14 @@ def latex_escape_char(char: str) -> str:
     return replacements.get(char, char)
 
 
-def latex_escape(text: str) -> str:
-    text = typeset_encyclopaedia_spelling(text)
-    return "".join(latex_escape_char(char) for char in text)
-
-
-def latex_escape_table_text(text: str, table_style: LatexTableStyle) -> str:
-    if not table_style.break_long_tokens:
-        return latex_escape(text)
+def escape_latex_plain_text(text: str, table_style: LatexTableStyle | None = None) -> str:
+    if table_style is None or not table_style.break_long_tokens:
+        return "".join(latex_escape_char(char) for char in text)
 
     chunk = max(2, table_style.break_chunk)
     output: List[str] = []
     run_length = 0
-    for char in typeset_encyclopaedia_spelling(text):
+    for char in text:
         output.append(latex_escape_char(char))
         if char.isalnum():
             run_length += 1
@@ -465,6 +480,53 @@ def latex_escape_table_text(text: str, table_style: LatexTableStyle) -> str:
             output.append(r"\allowbreak{}")
         run_length = 0
     return "".join(output)
+
+
+def split_url_suffix(url: str) -> tuple[str, str]:
+    trimmed = url.rstrip(URL_TRAILING_PUNCTUATION)
+    if not trimmed:
+        return url, ""
+
+    # Keep balanced parentheses when URL path legitimately ends with ')'.
+    suffix = url[len(trimmed) :]
+    while suffix.startswith(")") and trimmed.count("(") > trimmed.count(")"):
+        trimmed += ")"
+        suffix = suffix[1:]
+    return trimmed, suffix
+
+
+def normalize_url_for_latex(url: str) -> str:
+    return url.replace("{", "%7B").replace("}", "%7D")
+
+
+def latex_escape_with_hyperlinks(
+    text: str, table_style: LatexTableStyle | None = None
+) -> str:
+    rendered = typeset_encyclopaedia_spelling(text)
+    parts: List[str] = []
+    cursor = 0
+    for match in URL_PATTERN.finditer(rendered):
+        start, end = match.span()
+        if start > cursor:
+            parts.append(escape_latex_plain_text(rendered[cursor:start], table_style))
+        raw_url = match.group(0)
+        clean_url, trailing = split_url_suffix(raw_url)
+        if clean_url:
+            parts.append(rf"\url{{{normalize_url_for_latex(clean_url)}}}")
+        if trailing:
+            parts.append(escape_latex_plain_text(trailing, table_style))
+        cursor = end
+    if cursor < len(rendered):
+        parts.append(escape_latex_plain_text(rendered[cursor:], table_style))
+    return "".join(parts)
+
+
+def latex_escape(text: str) -> str:
+    return latex_escape_with_hyperlinks(text, table_style=None)
+
+
+def latex_escape_table_text(text: str, table_style: LatexTableStyle) -> str:
+    return latex_escape_with_hyperlinks(text, table_style=table_style)
 
 
 def encyclopedia_replacement(match: re.Match[str]) -> str:
@@ -848,6 +910,20 @@ def canonical_column_name(column: str) -> str:
     return normalize_cell_text(column).casefold().replace(" ", "_")
 
 
+def display_column_label(column: str) -> str:
+    canonical = canonical_column_name(column)
+    return COLUMN_LABEL_OVERRIDES.get(canonical, normalize_cell_text(column))
+
+
+def humanize_slug_value(value: str) -> str:
+    match = IMPORT_SLUG_PATTERN.fullmatch(value)
+    if match is None:
+        return value
+    slug_prefix, index_text = match.groups()
+    label = IMPORT_SLUG_LABELS.get(slug_prefix, slug_prefix.replace("_", " ").title())
+    return f"{label} #{int(index_text)}"
+
+
 def filter_columns_for_volume_chapter(volume: Volume, columns: Sequence[str]) -> List[str]:
     # Chapter-specific table policy: hide historical "tradition" column in Chapter 4.
     if volume.tag != "HISTORICAL":
@@ -876,6 +952,8 @@ def render_latex_cell(column: str, value: str, table_style: LatexTableStyle) -> 
     if normalized == "-":
         return "-"
     canonical = canonical_column_name(column)
+    if canonical == "slug":
+        normalized = humanize_slug_value(normalized)
     if canonical in LATEX_NUMERIC_COLUMNS or canonical in LATEX_MATH_DECIMAL_COLUMNS:
         normalized = format_numeric_cell_text(normalized, table_style)
     if canonical in LATEX_MATH_COLUMNS:
@@ -995,7 +1073,10 @@ def build_latex_table_for_volume(
     )
     tabcolsep = f"{tabcolsep_value:.2f}pt"
     header_cells = (
-        " & ".join(latex_escape_table_text(column, table_style) for column in columns) + r" \\"
+        " & ".join(
+            latex_escape_table_text(display_column_label(column), table_style) for column in columns
+        )
+        + r" \\"
     )
     if table_style.header_shade:
         header_cells = r"\rowcolor{tableheader}" + " " + header_cells
@@ -1019,9 +1100,6 @@ def build_latex_table_for_volume(
             header_cells,
             r"\midrule",
             r"\endhead",
-            r"\midrule",
-            rf"\multicolumn{{{len(columns)}}}{{r}}{{\footnotesize\itshape Continued on next page}} \\",
-            r"\midrule",
             r"\endfoot",
             r"\bottomrule",
             r"\endlastfoot",
@@ -1071,9 +1149,6 @@ def build_latex_volume_index_table(
             header_cells,
             r"\midrule",
             r"\endhead",
-            r"\midrule",
-            rf"\multicolumn{{{len(columns)}}}{{r}}{{\footnotesize\itshape Continued on next page}} \\",
-            r"\midrule",
             r"\endfoot",
             r"\bottomrule",
             r"\endlastfoot",
@@ -1690,10 +1765,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--table-max-decimals",
         type=int,
-        default=10,
+        default=24,
         help=(
             "Maximum fractional digits shown for plain decimal numeric fields in LaTeX/PDF tables "
-            "(default: 10; set to a large value to preserve more digits)."
+            "(default: 24; set to a large value to preserve more digits)."
         ),
     )
     parser.add_argument(
@@ -1711,14 +1786,22 @@ def parse_args() -> argparse.Namespace:
     parser.set_defaults(table_trim_trailing_zeros=True)
     parser.add_argument(
         "--table-zebra",
+        dest="table_zebra",
         action="store_true",
-        help="Enable subtle alternating row shading in LaTeX/PDF tables.",
+        help="Enable alternating light-gray row shading in LaTeX/PDF tables.",
     )
+    parser.add_argument(
+        "--no-table-zebra",
+        dest="table_zebra",
+        action="store_false",
+        help="Disable alternating row shading in LaTeX/PDF tables.",
+    )
+    parser.set_defaults(table_zebra=True)
     parser.add_argument(
         "--table-zebra-black-pct",
         type=float,
-        default=2.5,
-        help="Black percentage for zebra stripe shading (default: 2.5).",
+        default=6.0,
+        help="Black percentage for zebra stripe shading (default: 6.0).",
     )
     parser.add_argument(
         "--table-header-shade",

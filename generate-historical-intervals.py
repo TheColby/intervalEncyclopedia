@@ -144,12 +144,12 @@ TRITAVE_EDT_LANDMARKS: Dict[int, Annotation] = {
 
 OCTAVE_EDO_FALLBACK = Annotation(
     tradition="Contemporary xenharmonic equal-division cataloging (EDO)",
-    note_template="Systematic step {step} in {divisions}-EDO.",
+    note_template="Step {step} in {divisions}-EDO.",
 )
 
 TRITAVE_EDT_FALLBACK = Annotation(
     tradition="Contemporary xenharmonic equal tritave cataloging (EDT/ED3)",
-    note_template="Systematic step {step} in {divisions}-EDT (3:1 period family).",
+    note_template="Step {step} in {divisions}-EDT (3:1 period family).",
 )
 
 FIFTH_ED_FALLBACK = Annotation(
@@ -683,7 +683,7 @@ def read_scribd_interval_tsv(path: Path) -> List[HistoricalInterval]:
         records=load_ratio_name_records(path, source_label="Scribd source"),
         slug_prefix="scribd",
         tradition="Scribd List of intervals compilation (historical/esoteric mixed sources)",
-        note_without_reduction="Imported from Scribd List of intervals without octave reduction.",
+        note_without_reduction="Imported from Scribd List of intervals.",
         note_with_reduction=(
             "Imported from Scribd List of intervals and octave-reduced to project range."
         ),
