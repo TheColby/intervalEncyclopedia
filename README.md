@@ -177,7 +177,7 @@ I/O matrix:
 - `generate-musical-intervals-csv.py`:
   outputs: `csv`, `json`; inputs: HTML table from `--url`.
 
-## Volume I: Just Intervals
+## Chapter I: Just Intervals
 
 Run:
 
@@ -212,7 +212,7 @@ Algorithm notes:
 - sieve-based largest-prime-factor table,
 - optional prime-limit post-filter.
 
-## Volume II: Equal-Division (EDO) Intervals
+## Chapter II: Equal-Division (EDO) Intervals
 
 Run:
 
@@ -250,7 +250,7 @@ $$
 2^{12/13} \Rightarrow \text{"12th scale degree of 13-EDO"}.
 $$
 
-## Volume III: Historical and Esoteric Intervals
+## Chapter III: Historical and Esoteric Intervals
 
 Run:
 

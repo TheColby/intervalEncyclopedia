@@ -202,7 +202,7 @@ def resolve_page_layout(
 
 
 @dataclass(frozen=True)
-class Volume:
+class Chapter:
     tag: str
     title: str
     source_path: Path
@@ -335,7 +335,7 @@ def ensure_source(
     run_generator(command, label, reporter)
 
 
-def read_volume(tag: str, title: str, source_path: Path) -> Volume:
+def read_volume(tag: str, title: str, source_path: Path) -> Chapter:
     source_format = infer_source_format(source_path)
     text = source_path.read_text(encoding="utf-8").rstrip("\n")
     if source_format == "txt":
@@ -347,7 +347,7 @@ def read_volume(tag: str, title: str, source_path: Path) -> Volume:
     else:
         total_rows = "unknown"
 
-    return Volume(
+    return Chapter(
         tag=tag,
         title=title,
         source_path=source_path,
@@ -357,7 +357,7 @@ def read_volume(tag: str, title: str, source_path: Path) -> Volume:
     )
 
 
-def write_master_txt(output_path: Path, volumes: List[Volume], reporter: Reporter) -> None:
+def write_master_txt(output_path: Path, volumes: List[Chapter], reporter: Reporter) -> None:
     reporter.info(f"Writing master tome (txt) with {len(volumes)} volumes...")
     generated_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     progress = reporter.progress(total=max(1, len(volumes) * 2), label="Master assembly")
@@ -394,7 +394,7 @@ def write_master_txt(output_path: Path, volumes: List[Volume], reporter: Reporte
     progress.finish()
 
 
-def write_master_csv(output_path: Path, volumes: List[Volume], reporter: Reporter) -> None:
+def write_master_csv(output_path: Path, volumes: List[Chapter], reporter: Reporter) -> None:
     reporter.info(f"Writing master table (csv) with {len(volumes)} volume rows...")
     columns = ["tag", "title", "source_file", "source_format", "total_rows", "content"]
     progress = reporter.progress(total=max(1, len(volumes)), label="Master CSV rows")
@@ -417,7 +417,7 @@ def write_master_csv(output_path: Path, volumes: List[Volume], reporter: Reporte
     progress.finish()
 
 
-def write_master_json(output_path: Path, volumes: List[Volume], reporter: Reporter) -> None:
+def write_master_json(output_path: Path, volumes: List[Chapter], reporter: Reporter) -> None:
     reporter.info(f"Writing master object (json) with {len(volumes)} volumes...")
     generated_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     payload = {
@@ -562,7 +562,7 @@ def json_value_to_text(value: object) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
-def parse_volume_rows(volume: Volume) -> tuple[List[str], List[dict[str, str]]]:
+def parse_volume_rows(volume: Chapter) -> tuple[List[str], List[dict[str, str]]]:
     if volume.source_format == "txt":
         columns: List[str] = []
         rows: List[dict[str, str]] = []
@@ -924,7 +924,7 @@ def humanize_slug_value(value: str) -> str:
     return f"{label} #{int(index_text)}"
 
 
-def filter_columns_for_volume_chapter(volume: Volume, columns: Sequence[str]) -> List[str]:
+def filter_columns_for_volume_chapter(volume: Chapter, columns: Sequence[str]) -> List[str]:
     # Chapter-specific table policy: hide historical "tradition" column in Chapter 4.
     if volume.tag != "HISTORICAL":
         return list(columns)
@@ -1051,7 +1051,7 @@ def latex_column_spec_for_columns(
 
 
 def build_latex_table_for_volume(
-    volume: Volume,
+    volume: Chapter,
     table_style: LatexTableStyle,
     compact_tables: bool = False,
 ) -> List[str]:
@@ -1118,7 +1118,7 @@ def build_latex_table_for_volume(
 
 
 def build_latex_volume_index_table(
-    volumes: List[Volume],
+    volumes: List[Chapter],
     table_style: LatexTableStyle,
     compact_tables: bool,
 ) -> List[str]:
@@ -1170,7 +1170,7 @@ def build_latex_volume_index_table(
 
 
 def build_latex_document(
-    volumes: List[Volume],
+    volumes: List[Chapter],
     generated_utc: str,
     page_layout: PageLayout,
     table_style: LatexTableStyle,
@@ -1244,14 +1244,14 @@ def build_latex_document(
         rf"  \item Edition title: {latex_escape(MASTER_TITLE)}",
         rf"  \item Generation timestamp (UTC): {latex_escape(generated_utc)}",
         rf"  \item Paper layout: {latex_escape(page_layout.paper_label)} ({latex_escape(page_layout.orientation)})",
-        rf"  \item Volume count: {len(volumes)}",
+        rf"  \item Chapter count: {len(volumes)}",
         rf"  \item Table font size: \texttt{{{latex_escape(table_style.fit_font_size if compact_tables else table_style.font_size)}}}",
         rf"  \item Table spacing: tabcolsep={table_style.fit_tabcolsep_pt if compact_tables else table_style.tabcolsep_pt:.2f}pt, arraystretch={table_style.arraystretch:.3f}, extrarowheight={table_style.extra_row_height_pt:.2f}pt",
         rf"  \item Decimal render policy: max\_decimals={table_style.max_decimals}, trim\_trailing\_zeros={latex_escape(str(table_style.trim_trailing_zeros))}",
         rf"  \item Optional row styling: zebra={latex_escape(str(table_style.zebra))} ({zebra_pct}\% black), header\_shade={latex_escape(str(table_style.header_shade))} ({header_pct}\% black)",
         r"\end{itemize}",
         r"\mainmatter",
-        r"\chapter{Volume Index}",
+        r"\chapter{Chapter Index}",
     ]
     lines.extend(
         build_latex_volume_index_table(
@@ -1287,7 +1287,7 @@ def build_latex_document(
 
 def write_master_latex(
     output_path: Path,
-    volumes: List[Volume],
+    volumes: List[Chapter],
     page_layout: PageLayout,
     table_style: LatexTableStyle,
     reporter: Reporter,
@@ -1474,7 +1474,7 @@ def compile_pdf_document(
 
 def write_master_pdf(
     output_path: Path,
-    volumes: List[Volume],
+    volumes: List[Chapter],
     page_layout: PageLayout,
     table_style: LatexTableStyle,
     latex_engine: str,
@@ -1561,7 +1561,7 @@ def write_master_pdf(
 
 def write_master(
     output_path: Path,
-    volumes: List[Volume],
+    volumes: List[Chapter],
     output_format: str,
     page_layout: PageLayout,
     table_style: LatexTableStyle,
