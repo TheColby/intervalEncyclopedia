@@ -1,5 +1,5 @@
 # The Interval Encoclpaedia
-# generated_utc=2026-03-02T03:05:22Z
+# generated_utc=2026-03-08T07:10:10Z
 # volumes=3
 # format=tabular-source-plus-volume-markers
 #
@@ -17,7 +17,7 @@ HISTORICAL	Historical and Esoteric Irrational Intervals	historical-intervals.txt
 # source_format=txt
 # total_rows=15616
 # intervalEncyclopedia - Just Intervals
-# generated_utc=2026-03-02T02:58:55Z
+# generated_utc=2026-03-08T07:10:09Z
 # harmonic_limit=320
 # max_prime_filter=none
 # total_rows=15616
@@ -15647,7 +15647,7 @@ ratio	ratio_decimal	prime_factorization	cents	largest_prime	odd_limit	common_nam
 # source_format=txt
 # total_rows=4752
 # intervalEncyclopedia - Equal Division of the Octave (EDO) Intervals
-# generated_utc=2026-03-02T02:58:55Z
+# generated_utc=2026-03-08T07:10:09Z
 # min_edo=1
 # max_edo=96
 # include_unison=True
@@ -20416,7 +20416,7 @@ edo	step	interval_name	ratio	prime_factorization	cents	expression
 # source_format=txt
 # total_rows=4629
 # intervalEncyclopedia - Historical and Esoteric Irrationals
-# generated_utc=2026-03-02T02:58:55Z
+# generated_utc=2026-03-08T07:10:09Z
 # sort_by=value
 # used_extra_source=False
 # total_rows=4629
@@ -23228,7 +23228,7 @@ edo_0042_0017	42-EDO Step 17	1.323870407355972167451341	-	485.714285714285836093
 ed_fifth_0013_0009	13-ED(3/2) Step 9	1.324065083866677872137529	-	485.968846752960416779387742			(3/2)^(9/13)							Meantone and circulating-temperament consonance tempering studies	Equal division of the perfect fifth (3/2), step 9 of 13.
 ed_fifth_0026_0018	26-ED(3/2) Step 18	1.324065083866677872137529	-	485.968846752960416779387742			(3/2)^(18/26)							Meantone and circulating-temperament consonance tempering studies	Equal division of the perfect fifth (3/2), step 18 of 26.
 edo_0037_0015	37-EDO Step 15	1.324461039094988024089616	-	486.486486486486569447151851			2^(15/37)							Contemporary xenharmonic equal-division cataloging (EDO)	Step 15 in 37-EDO.
-plastic_constant	Plastic Constant	1.324717957244746058265150	-	486.822277650989462927100249			real_root(x^3 - x - 1)							20th-century proportion theory and modern algorithmic tuning	Appears in recursive and morphic proportion systems.
+plastic_constant	Plastic Constant	1.324717957244746058265150	-	486.822277650989462927100249			root(x^3 - x - 1)							20th-century proportion theory and modern algorithmic tuning	Appears in recursive and morphic proportion systems.
 edo_0032_0013	32-EDO Step 13	1.325236643159741323216849	-	487.500000000000056843418861			2^(13/32)							Contemporary xenharmonic equal-division cataloging (EDO)	Step 13 in 32-EDO.
 edo_0064_0026	64-EDO Step 26	1.325236643159741323216849	-	487.500000000000056843418861			2^(26/64)							Contemporary xenharmonic equal-division cataloging (EDO)	Step 26 in 64-EDO.
 edo_0059_0024	59-EDO Step 24	1.325723270641041340311972	-	488.135593220338876108144177			2^(24/59)							Contemporary xenharmonic equal-division cataloging (EDO)	Step 24 in 59-EDO.

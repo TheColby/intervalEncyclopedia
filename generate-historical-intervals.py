@@ -195,7 +195,7 @@ def seed_constants() -> List[HistoricalInterval]:
         HistoricalInterval(
             slug="plastic_constant",
             name="Plastic Constant",
-            expression="real_root(x^3 - x - 1)",
+            expression="root(x^3 - x - 1)",
             value=plastic_constant(),
             tradition="20th-century proportion theory and modern algorithmic tuning",
             note="Appears in recursive and morphic proportion systems.",

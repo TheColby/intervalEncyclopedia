@@ -6,7 +6,7 @@
 2. equal-division-of-the-octave (EDO) intervals,
 3. historical/esoteric interval systems (including irrational and non-octave families).
 
-The repository is designed for both computational analysis and publication workflows (plain-text volumes and stitched master tome output). The compiled master tome is called "The Tuning Encyclopedia."
+The repository is designed for both computational analysis and publication workflows (plain-text chapters and stitched master tome output). The compiled master tome is called "The Tuning Encyclopedia."
 
 ## Why This Exists
 
@@ -136,7 +136,7 @@ Detailed code-level reference:
 
 ## Quick Start
 
-Generate all default volumes and assemble master output:
+Generate all default chapters and assemble master output:
 
 ```bash
 python3 /Users/cleider/dev/intervalEncoclopedia/generate-master-encyclopedia.py \
@@ -160,7 +160,7 @@ All generator scripts share:
 All generator scripts now support explicit output-format selection plus extension-based auto detection.
 
 - Use `--output-format auto` to infer from `--output` file extension.
-- For the volume generators, `.txt`, `.csv`, and `.json` are supported output extensions.
+- For the chapter generators, `.txt`, `.csv`, and `.json` are supported output extensions.
 - For the master script, `.txt`, `.csv`, `.json`, `.tex`, and `.pdf` are supported output extensions.
 - For the musical table exporter, `.csv` and `.json` are supported output extensions.
 
@@ -173,7 +173,7 @@ I/O matrix:
 - `generate-historical-intervals.py`:
   outputs: `txt`, `csv`, `json`; imported source inputs: `.tsv`, `.csv`, `.json`; extra interval input: `--extra-source` (`.tsv`, `.csv`, `.json`) plus legacy alias `--extra-json`.
 - `generate-master-encyclopedia.py`:
-  outputs: `txt`, `csv`, `json`, `latex`, `pdf`; source volume inputs: `.txt`, `.csv`, `.json`.
+  outputs: `txt`, `csv`, `json`, `latex`, `pdf`; source chapter inputs: `.txt`, `.csv`, `.json`.
 - `generate-musical-intervals-csv.py`:
   outputs: `csv`, `json`; inputs: HTML table from `--url`.
 
@@ -341,9 +341,10 @@ Behavior:
 - supports standard presets including `us-letter`, `us-legal`, `a4`, and `11x17` (plus `a3`, `a5`, `b5`, `executive`),
 - allows arbitrary page sizes with `--page-width` and `--page-height` (unit required, e.g. `11in`, `279mm`),
 - renders interval expressions mathematically in LaTeX/PDF output (for example prime factorizations and symbolic expressions are typeset as equations),
-- uses aligned longtable columns with configurable width weights and spacing for all volume/index tables in LaTeX/PDF output,
+- uses aligned longtable columns with configurable width weights and spacing for all chapter/index tables in LaTeX/PDF output,
+- can enforce rendering regressions with `--check-rendering-conventions` (chapter labels, hyperlink wrapping, zebra rows, banned phrase guardrails),
 - supports advanced LaTeX/PDF table rendering controls (row spacing, minimum row struts, long-token soft breaks, optional zebra striping, optional header shading, decimal trimming, and width-weight tuning),
-- writes volume markers only for text master output:
+- writes chapter markers only for text master output:
   `%%<VOLUME:JUST:BEGIN>` ... `%%<VOLUME:JUST:END>`,
   `%%<VOLUME:TEMPERED:BEGIN>` ... `%%<VOLUME:TEMPERED:END>`,
   `%%<VOLUME:HISTORICAL:BEGIN>` ... `%%<VOLUME:HISTORICAL:END>`.
@@ -473,7 +474,7 @@ $$
 
 which matches the constrained Stern-Brocot region (ratio band $[1,2)$) times coprimality density.
 
-For full-scale corpus generation, explicitly raise limits in each source volume, then assemble:
+For full-scale corpus generation, explicitly raise limits in each source chapter, then assemble:
 
 ```bash
 python3 /Users/cleider/dev/intervalEncoclopedia/generate-just-intervals.py \
@@ -541,6 +542,12 @@ python3 -m py_compile \
   /Users/cleider/dev/intervalEncoclopedia/generate-historical-intervals.py \
   /Users/cleider/dev/intervalEncoclopedia/generate-master-encyclopedia.py \
   /Users/cleider/dev/intervalEncoclopedia/generate-musical-intervals-csv.py
+```
+
+One-command release rebuild (master text + both PDFs with shared style profile):
+
+```bash
+/Users/cleider/dev/intervalEncoclopedia/scripts/release_build.sh
 ```
 
 ## License / Attribution

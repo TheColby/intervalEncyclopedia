@@ -121,6 +121,16 @@ PAPER_SIZE_ALIAS_TO_CANONICAL = {
     "tabloid": "11x17",
     "ledger": "11x17",
 }
+RENDERING_BANNED_PHRASES = (
+    "Continued on next page",
+    "Systematic step",
+    "Imported from Scribd List of intervals without octave reduction.",
+)
+RENDERING_REQUIRED_TOKENS = (
+    r"\rowcolors{2}{tablezebra}{white}",
+    r"\chapter{Chapter Index}",
+    r"\url{http",
+)
 
 
 def infer_output_format(path: Path, requested_format: str = "auto") -> str:
@@ -552,6 +562,62 @@ def sanitize_verbatim_text(text: str) -> str:
 
 def normalize_cell_text(value: str) -> str:
     return str(value).replace("\x00", "").replace("\t", " ").replace("\n", " ").strip()
+
+
+def find_unwrapped_http_urls(document: str) -> List[str]:
+    unwrapped: List[str] = []
+    for match in re.finditer(r"https?://[^\s}]+", document):
+        start = match.start()
+        prefix = document[max(0, start - 5) : start]
+        if prefix == r"\url{":
+            continue
+        unwrapped.append(match.group(0))
+    return unwrapped
+
+
+def validate_rendering_conventions(document: str) -> None:
+    failures: List[str] = []
+    for phrase in RENDERING_BANNED_PHRASES:
+        if phrase in document:
+            failures.append(f"found banned phrase: {phrase!r}")
+
+    for token in RENDERING_REQUIRED_TOKENS:
+        if token not in document:
+            failures.append(f"missing required token: {token!r}")
+
+    if r"\chapter{Volume Index}" in document:
+        failures.append("found legacy chapter title '\\chapter{Volume Index}'")
+
+    unwrapped_urls = find_unwrapped_http_urls(document)
+    if unwrapped_urls:
+        preview = ", ".join(unwrapped_urls[:3])
+        failures.append(f"found unwrapped URL(s): {preview}")
+
+    if failures:
+        bullet_lines = "\n".join(f"- {failure}" for failure in failures)
+        raise RuntimeError(
+            "Rendering convention checks failed.\n"
+            f"{bullet_lines}\n"
+            "Regenerate sources/output after fixing the table rendering pipeline."
+        )
+
+
+def run_rendering_convention_checks(
+    *,
+    volumes: List[Volume],
+    page_layout: PageLayout,
+    table_style: LatexTableStyle,
+    reporter: Reporter,
+) -> None:
+    reporter.info("Running rendering convention checks...")
+    check_document = build_latex_document(
+        volumes=volumes,
+        generated_utc="rendering-check",
+        page_layout=page_layout,
+        table_style=table_style,
+    )
+    validate_rendering_conventions(check_document)
+    reporter.info("Rendering convention checks passed.")
 
 
 def json_value_to_text(value: object) -> str:
@@ -1907,6 +1973,14 @@ def parse_args() -> argparse.Namespace:
         default=Path(sys.executable),
         help="Python executable used to invoke source generator scripts.",
     )
+    parser.add_argument(
+        "--check-rendering-conventions",
+        action="store_true",
+        help=(
+            "Run LaTeX rendering regression checks (chapter labels, hyperlink wrapping, "
+            "zebra rows, and banned phrase guardrails) before writing output."
+        ),
+    )
     add_output_control_args(parser)
 
     return parser.parse_args()
@@ -2119,6 +2193,13 @@ def main() -> None:
             args.historical_input,
         ),
     ]
+    if args.check_rendering_conventions:
+        run_rendering_convention_checks(
+            volumes=volumes,
+            page_layout=page_layout,
+            table_style=table_style,
+            reporter=reporter,
+        )
     write_master(
         args.output,
         volumes,
